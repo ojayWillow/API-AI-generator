@@ -12,7 +12,7 @@ Environment variables (Vercel project settings):
   MONTHLY_CAP_USD         default 50
 
 Routes (vercel.json rewrites /api/<op> to this file with ?op=<op>):
-  GET  state | tasks?id=   POST quote | generate | item | upload | refresh-credits
+  GET  state | tasks?id=   POST quote | generate | finalize | item | upload | refresh-credits
 """
 
 from __future__ import annotations
@@ -47,6 +47,8 @@ PRICING = {
         "2.5": {"id": "bytedance/seedance-2-5", "credits_per_second": {"480p": 28, "720p": 63, "1080p": 158},
                 "durations": [4, 5, 6, 8, 10, 12, 15], "resolutions": ["480p", "720p", "1080p"],
                 "default_resolution": "480p"},
+        # renders an existing 480p draft at 1080p with the same motion; kie.ai publishes no separate rate
+        "2.5-final": {"id": "bytedance/seedance-2-5-draft", "credits_per_second": 158},
     },
 }
 
@@ -387,6 +389,17 @@ def inspect_bytes(b: bytes, kind: str) -> dict:
 # ---------------------------------------------------------------------------
 def quote(p: dict) -> dict:
     kind = p.get("kind")
+    if kind == "final":
+        try:
+            dur = int(round(float(p.get("duration") or 0)))
+        except (TypeError, ValueError):
+            dur = 0
+        if dur <= 0:
+            raise ApiError("duration is required to price a 1080p render")
+        pr = PRICING["video"]["2.5-final"]
+        c = int(pr["credits_per_second"] * dur)
+        return {"kind": "final", "model": "2.5-final", "model_id": pr["id"], "duration_s": dur, "resolution": "1080p",
+                "credits_est": c, "usd_est": round(c * USD_PER_CREDIT, 4)}
     if kind == "image":
         model = p.get("model") or "nano-banana-2"
         res = p.get("resolution") or "1K"
@@ -397,10 +410,14 @@ def quote(p: dict) -> dict:
         return {"kind": "image", "model": model, "model_id": pr["id"], "resolution": res,
                 "credits_est": c, "usd_est": round(c * USD_PER_CREDIT, 4)}
     if kind == "video":
-        model = p.get("model") or "pro"
+        model = p.get("model") or "2.5"
         pr = PRICING["video"].get(model)
-        if not pr:
+        if not pr or model == "2.5-final":
             raise ApiError(f"unknown video model {model}")
+        if p.get("draft"):
+            if model != "2.5":
+                raise ApiError("draft mode is a Seedance 2.5 feature")
+            p = {**p, "resolution": "480p"}
         try:
             req = float(p.get("duration") or 10)
         except (TypeError, ValueError):
@@ -442,7 +459,8 @@ def generate(p: dict) -> list[dict]:
     if not prompt:
         raise ApiError("prompt is required")
     q = quote(p)
-    count = max(1, min(4, int(p.get("count") or 1))) if q["kind"] == "image" else 1
+    allow_multi = q["kind"] == "image" or (q["kind"] == "video" and p.get("draft"))
+    count = max(1, min(4, int(p.get("count") or 1))) if allow_multi else 1
     entries = ledger_read()
     if q["kind"] == "video" and not p.get("approve"):
         raise ApiError("Paid video run needs approval. Tick 'I approve this paid run' and generate again.",
@@ -473,14 +491,19 @@ def generate(p: dict) -> list[dict]:
         image = (p.get("image") or "").strip()
         if not re.match(r"^https?://", image):
             raise ApiError("source still must be a public URL; click Animate on a gallery image")
+        draft = bool(p.get("draft")) and q["model"] == "2.5"
+        audio = p.get("audio") is not False
         if q["model"] == "2.5":
             inp = {"prompt": full_prompt, "first_frame_url": image, "aspect_ratio": "adaptive",
-                   "duration": q["duration_s"], "resolution": q["resolution"]}
+                   "duration": q["duration_s"], "resolution": q["resolution"], "generate_audio": audio,
+                   "output_format": "mp4"}
+            if draft:
+                inp["draft"] = True
         else:
             inp = {"prompt": full_prompt, "image_url": image, "resolution": "1080p", "duration": str(q["duration_s"]),
                    "camera_fixed": bool(p.get("camera_fixed")), "seed": seed}
         params = {"duration_s": q["duration_s"], "resolution": q["resolution"], "camera_fixed": bool(p.get("camera_fixed")),
-                  "seed": seed}
+                  "seed": seed, "draft": draft, "generate_audio": audio}
         input_image = image
 
     jobs = []
@@ -508,6 +531,44 @@ def generate(p: dict) -> list[dict]:
         task_save(job)
         jobs.append(job)
     return jobs
+
+
+def finalize(p: dict) -> dict:
+    """Render a 480p Seedance 2.5 draft at 1080p. The draft task id stays valid for 7 days."""
+    draft_id = str(p.get("id") or "").strip()
+    if not draft_id:
+        raise ApiError("draft id is required")
+    entries = ledger_read()
+    src = next((e for e in entries if e.get("task_id") == draft_id), None)
+    if not src:
+        raise ApiError("draft not found in the ledger", 404)
+    if not ((src.get("params") or {}).get("draft")):
+        raise ApiError("that clip is not a 480p draft; only drafts can be rendered at 1080p")
+    if any(e.get("parent_id") == draft_id and e.get("model") == "2.5-final" for e in entries):
+        raise ApiError("this draft already has a 1080p final")
+    dur = (src.get("params") or {}).get("duration_s") or p.get("duration")
+    q = quote({"kind": "final", "duration": dur})
+    if not p.get("approve"):
+        raise ApiError("Paid 1080p render needs approval.", 200, approval_required=True, quote=q, spend=spend_summary(entries))
+    enforce_caps(entries, q["usd_est"], bool(p.get("override_cap")))
+    r = kie("POST", "/api/v1/jobs/createTask",
+            {"model": q["model_id"], "input": {"draft_task_id": draft_id, "resolution": "1080p", "output_format": "mp4"}})
+    task_id = (r.get("data") or {}).get("taskId")
+    if r.get("code") != 200 or not task_id:
+        raise ApiError(f"kie.ai createTask failed: {r.get('msg') or r}", 502)
+    base = (src.get("name") or "draft").rsplit(".", 1)[0]
+    job = {
+        "id": task_id, "kind": "video", "model": "2.5-final", "model_id": q["model_id"], "prompt": src.get("prompt") or "",
+        "params": {"duration_s": q["duration_s"], "resolution": "1080p", "draft_task_id": draft_id, "draft": False,
+                   "generate_audio": (src.get("params") or {}).get("generate_audio", True)},
+        "name": f"{base}-1080p", "preset": src.get("preset"), "input_image": src.get("input_image"),
+        "credits_est": q["credits_est"], "usd_est": q["usd_est"], "status": "running", "kie_state": "rendering 1080p",
+        "started_at": time.time(), "created_at": now().isoformat(timespec="seconds"), "result": None,
+        "group": src.get("group"), "negative": src.get("negative"), "fields": src.get("fields"), "seed": None,
+        "parent_id": draft_id, "refs": None, "variant": None,
+    }
+    task_save(job)
+    return job
 
 
 def poll_task(task_id: str) -> dict:
@@ -668,7 +729,8 @@ class handler(BaseHTTPRequestHandler):
         if op == "quote":
             def _quote():
                 q = quote(body)
-                count = max(1, min(4, int(body.get("count") or 1))) if q["kind"] == "image" else 1
+                allow_multi = q["kind"] == "image" or (q["kind"] == "video" and body.get("draft"))
+                count = max(1, min(4, int(body.get("count") or 1))) if allow_multi else 1
                 if count > 1:
                     q.update(count=count, credits_est_total=q["credits_est"] * count,
                              usd_est_total=round(q["usd_est"] * count, 4))
@@ -679,6 +741,11 @@ class handler(BaseHTTPRequestHandler):
                 jobs = generate(body)
                 return {"ok": True, "jobs": jobs, "job": jobs[0]}
             return self._run(_gen)
+        if op == "finalize":
+            def _fin():
+                job = finalize(body)
+                return {"ok": True, "jobs": [job], "job": job}
+            return self._run(_fin)
         if op == "item":
             return self._run(lambda: update_item(body))
         if op == "upload":

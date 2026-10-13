@@ -12,8 +12,9 @@ Commands
   image    --prompt P [--model nano-banana-2|gpt-image-2] [--aspect 9:16]
            [--resolution 1K|2K|4K] [--ref URL_OR_PATH ...] [--name slug]
   upload   --file PATH                      host a local file on kie.ai (24 h)
-  video    --image PATH_OR_URL --prompt P [--model pro|lite|2.5]
-           [--duration 5|10] [--name slug] --approve
+  video    --image PATH_OR_URL --prompt P [--model 2.5|pro|lite] [--draft]
+           [--resolution 480p|720p|1080p] [--duration N] [--name slug] --approve
+  finalize --draft-task-id ID --approve      render a 2.5 draft at 1080p
   status   --task-id ID
   ledger   [--all]                          spend summary (today / month)
   inspect  --file PATH                      real width/height (+ duration) of png/jpg/mp4
@@ -466,6 +467,14 @@ def quote_video(model: str, duration: float, resolution: str | None = None) -> d
 # ---------------------------------------------------------------------------
 # commands
 # ---------------------------------------------------------------------------
+def quote_final(duration: float) -> dict:
+    pr = load_pricing()["video"]["2.5-final"]
+    dur = int(round(duration))
+    credits = int(pr["credits_per_second"] * dur)
+    return {"kind": "final", "model": "2.5-final", "model_id": pr["id"], "duration_s": dur, "resolution": "1080p",
+            "credits_est": credits, "usd_est": round(credits * USD_PER_CREDIT, 4)}
+
+
 def cmd_credits(_: argparse.Namespace) -> None:
     r = kie("GET", "/api/v1/chat/credit")
     if r.get("code") != 200:
@@ -481,8 +490,12 @@ def cmd_credits(_: argparse.Namespace) -> None:
 
 
 def cmd_quote(a: argparse.Namespace) -> None:
-    q = quote_image(a.model or "nano-banana-2", a.resolution or "1K") if a.kind == "image" \
-        else quote_video(a.model or "pro", a.duration or 10, a.resolution)
+    if a.kind == "image":
+        q = quote_image(a.model or "nano-banana-2", a.resolution or "1K")
+    elif a.kind == "final":
+        q = quote_final(a.duration or 10)
+    else:
+        q = quote_video(a.model or "2.5", a.duration or 10, a.resolution)
     out({"ok": True, **q, "spend": spend_summary()})
 
 
@@ -546,8 +559,10 @@ def cmd_upload(a: argparse.Namespace) -> None:
 
 
 def cmd_video(a: argparse.Namespace) -> None:
-    model = a.model or "pro"
-    q = quote_video(model, a.duration or 10, a.resolution)
+    model = a.model or "2.5"
+    if a.draft and model != "2.5":
+        die("--draft is a Seedance 2.5 feature")
+    q = quote_video(model, a.duration or 10, "480p" if a.draft else a.resolution)
     s = enforce_caps(q["usd_est"], a.override_cap)
     if not a.approve:
         out({"ok": False, "approval_required": True,
@@ -563,7 +578,10 @@ def cmd_video(a: argparse.Namespace) -> None:
     image_url = ensure_url(a.image)
     if model == "2.5":
         inp = {"prompt": a.prompt, "first_frame_url": image_url, "aspect_ratio": "adaptive",
-               "duration": q["duration_s"], "resolution": q["resolution"]}
+               "duration": q["duration_s"], "resolution": q["resolution"], "generate_audio": not a.no_audio,
+               "output_format": "mp4"}
+        if a.draft:
+            inp["draft"] = True
     else:
         inp = {"prompt": a.prompt, "image_url": image_url, "resolution": "1080p",
                "duration": str(q["duration_s"]), "camera_fixed": bool(a.camera_fixed), "seed": int(a.seed)}
@@ -575,9 +593,33 @@ def cmd_video(a: argparse.Namespace) -> None:
     name = a.name or (still_local.stem if still_local else f"{dt.datetime.now():%Y%m%d-%H%M%S}-{slugify(a.prompt)}")
     finish("video", task, model, q["model_id"], a.prompt,
            {"duration_s": q["duration_s"], "resolution": q["resolution"], "camera_fixed": bool(a.camera_fixed),
-            "seed": int(a.seed)},
+            "seed": int(a.seed), "draft": bool(a.draft), "generate_audio": not a.no_audio},
            name, "mp4", q["credits_est"],
            {"input_image": str(still_local or a.image), "input_image_url": image_url, "preset": a.preset})
+
+
+def cmd_finalize(a: argparse.Namespace) -> None:
+    """Render a Seedance 2.5 draft (480p) at 1080p, keeping its motion. Draft ids are valid 7 days."""
+    src = next((e for e in read_ledger() if e.get("task_id") == a.draft_task_id), None)
+    dur = a.duration or ((src or {}).get("params") or {}).get("duration_s")
+    if not dur:
+        die("duration unknown for this draft; pass --duration")
+    q = quote_final(float(dur))
+    s = enforce_caps(q["usd_est"], a.override_cap)
+    if not a.approve:
+        out({"ok": False, "approval_required": True,
+             "message": "Paid 1080p render. Show this quote to the user and rerun with --approve after they say go.",
+             **q, "spend": s}, code=2)
+    log(f"Rendering draft {a.draft_task_id} at 1080p (~{q['credits_est']} credits / ${q['usd_est']:.2f})")
+    task_id = create_task(q["model_id"], {"draft_task_id": a.draft_task_id, "resolution": "1080p", "output_format": "mp4"})
+    task = poll_task(task_id, every=15, timeout=1800)
+    base = Path(src["file"]).stem if src and src.get("file") else f"draft-{a.draft_task_id[-6:]}"
+    name = a.name or f"{base}-1080p"
+    finish("video", task, "2.5-final", q["model_id"], (src or {}).get("prompt") or "",
+           {"duration_s": int(dur), "resolution": "1080p", "draft_task_id": a.draft_task_id, "draft": False},
+           name, "mp4", q["credits_est"],
+           {"input_image": (src or {}).get("input_image"), "preset": (src or {}).get("preset"),
+            "parent_id": a.draft_task_id, "group": (src or {}).get("group")})
 
 
 def cmd_status(a: argparse.Namespace) -> None:
@@ -621,7 +663,7 @@ def main() -> None:
     sub.add_parser("credits").set_defaults(fn=cmd_credits)
 
     p = sub.add_parser("quote")
-    p.add_argument("--kind", choices=["image", "video"], required=True)
+    p.add_argument("--kind", choices=["image", "video", "final"], required=True)
     p.add_argument("--model")
     p.add_argument("--duration", type=float)
     p.add_argument("--resolution", help="image: 1K/2K/4K; Seedance 2.5 video: 480p/720p/1080p")
@@ -646,10 +688,13 @@ def main() -> None:
     p = sub.add_parser("video")
     p.add_argument("--image", required=True, help="approved still: local path or public URL")
     p.add_argument("--prompt", required=True, help="short motion description")
-    p.add_argument("--model", choices=["pro", "lite", "2.5"])
+    p.add_argument("--model", choices=["2.5", "pro", "lite"], help="default 2.5")
     p.add_argument("--duration", type=float)
     p.add_argument("--resolution", choices=["480p", "720p", "1080p"],
-                   help="Seedance 2.5 only: 480p draft (28 cr/s), 720p (63), 1080p (158). Pro/Lite are always 1080p")
+                   help="Seedance 2.5 only: 480p (28 cr/s), 720p (63), 1080p (158). Pro/Lite are always 1080p")
+    p.add_argument("--draft", action="store_true",
+                   help="Seedance 2.5 draft mode: 480p preview whose task id can be rendered at 1080p with 'finalize' within 7 days")
+    p.add_argument("--no-audio", action="store_true", help="Seedance 2.5: skip generated audio")
     p.add_argument("--camera-fixed", action="store_true")
     p.add_argument("--seed", type=int, default=-1, help="-1 for random; reuse a seed to stay close to a previous clip")
     p.add_argument("--name")
@@ -657,6 +702,14 @@ def main() -> None:
     p.add_argument("--approve", action="store_true", help="user explicitly approved this paid run")
     p.add_argument("--override-cap", action="store_true")
     p.set_defaults(fn=cmd_video)
+
+    p = sub.add_parser("finalize", help="render a Seedance 2.5 draft at 1080p (same motion)")
+    p.add_argument("--draft-task-id", required=True, help="task id of the 480p draft (valid 7 days)")
+    p.add_argument("--duration", type=float, help="draft length in seconds, if not in the ledger")
+    p.add_argument("--name")
+    p.add_argument("--approve", action="store_true", help="user explicitly approved this paid run")
+    p.add_argument("--override-cap", action="store_true")
+    p.set_defaults(fn=cmd_finalize)
 
     p = sub.add_parser("status")
     p.add_argument("--task-id", required=True)

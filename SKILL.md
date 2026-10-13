@@ -34,14 +34,18 @@ cap would be exceeded.
 |---|---|---|---|
 | Image, default | `nano-banana-2` | `nano-banana-2` | ~$0.04 (1K) |
 | Image with readable text, signs, posters, app UI | `gpt-image-2` | `gpt-image-2-text-to-image` | ~$0.05 |
-| Video, default | `pro` | `bytedance/v1-pro-image-to-video` | 14 credits/s, $0.70 per 10 s |
-| Video, budget | `lite` | `bytedance/v1-lite-image-to-video` | 10 credits/s, $0.50 per 10 s |
-| Video, newest, only when the user asks for it | `2.5` | `bytedance/seedance-2-5` | 28 cr/s at 480p, 63 at 720p, 158 at 1080p ($7.90 per 10 s) |
+| Video, default | `2.5` | `bytedance/seedance-2-5` | 28 cr/s at 480p draft, 63 at 720p, 158 at 1080p |
+| Video, 1080p final of a draft | `finalize` command | `bytedance/seedance-2-5-draft` | 158 cr/s (same motion as the draft) |
+| Video, legacy, only if asked | `pro` / `lite` | Seedance 1.0 | 14 / 10 cr/s at 1080p |
 
-Read the matching recipe in `models/` before the first use of a model in a
-session. Seedance 1.0 accepts only 5 or 10 seconds; the script rounds other
-values and reports it. Video orientation is inherited from the still, so the
-still decides the aspect ratio.
+The user works on Seedance 2.5 only. The loop is **draft then finalize**:
+make one or more 480p drafts with `--draft` (about $1.40 per 10 s each), let
+the user pick, then run `finalize --draft-task-id <id>` to render that exact
+draft at 1080p (about $7.90 per 10 s). Never render 1080p directly unless the
+user asks for it. Draft ids expire 7 days after creation. Read
+`models/seedance-2-5-image-to-video.md` before the first video of a session.
+Video orientation is inherited from the still, so the still decides the
+aspect ratio.
 
 ## Workflow
 
@@ -75,24 +79,35 @@ with a revised prompt. Do not animate a still the user has not seen.
 
 ### 4. Quote and approval
 ```
-python <skill>/scripts/kie.py quote --kind video --model pro --duration 10
+python <skill>/scripts/kie.py quote --kind video --model 2.5 --duration 10 --resolution 480p
 ```
-Show the user: model, duration, estimated cost, and remaining budget for today
-and the month. Then wait. One "go" approves exactly one run. Never batch paid
-runs on one approval.
+Show the user: duration, quality, estimated cost, and remaining budget for
+today and the month. Then wait. One "go" approves exactly one run. Never batch
+paid runs on one approval.
 
 If the quote exits with code 3 the run would exceed a cap. Tell the user and
 only pass `--override-cap` after they explicitly agree.
 
-### 5. Animate
+### 5. Draft the clip (480p)
 ```
-python <skill>/scripts/kie.py video --image generations/<slug>.png --prompt "<short motion description>" --model pro --duration 10 --name <slug> --approve
+python <skill>/scripts/kie.py video --image generations/<slug>.png --prompt "<motion and sound>" --model 2.5 --draft --duration 10 --name <slug> --approve
 ```
 The script uploads the still to kie.ai's file host, submits the job, polls
 every 15 seconds, downloads the mp4, reads its real dimensions and duration,
-writes a sidecar `.json`, and appends the ledger. Motion prompts should be
-short and physical: camera move, subject motion, atmosphere. Keep the point
-of view identical to the still.
+writes a sidecar `.json`, and appends the ledger. The sidecar's `task_id` is
+the draft id. Motion prompts should be short and physical: camera move,
+subject motion, atmosphere, sound. Keep the point of view identical to the
+still. Make two or three drafts with different motion when the user is
+unsure; they are cheap compared with the final.
+
+### 5b. Finalize the keeper (1080p)
+```
+python <skill>/scripts/kie.py quote --kind final --duration 10
+python <skill>/scripts/kie.py finalize --draft-task-id <task_id of the draft> --approve
+```
+Quote first, wait for "go", then finalize. The final keeps the draft's motion
+and audio and is saved as `<draft name>-1080p.mp4` with `parent_id` pointing
+at the draft. Only finalize drafts the user has watched and approved.
 
 ### 6. Verify and report
 - Check the JSON `media` block: dimensions, duration, orientation.

@@ -29,6 +29,11 @@
       "durations": [4, 5, 6, 8, 10, 12, 15],
       "resolutions": ["480p", "720p", "1080p"],
       "default_resolution": "480p"
+    },
+    "2.5-final": {
+      "id": "bytedance/seedance-2-5-draft",
+      "credits_per_second": 158,
+      "_note": "Renders an existing 480p draft at 1080p with the same motion. kie.ai does not publish a separate rate; the 1080p rate is assumed and the ledger stores the real charge."
     }
   }
 }

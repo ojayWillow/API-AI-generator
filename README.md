@@ -80,6 +80,11 @@ clip. The create panel is built for iteration, not single shots:
 - **One-click follow-ups.** Animate, Tweak (reload into the builder), Use as
   ref, 16:9 and 1:1 reframes, a 2K or 4K version, and for clips Redo and Extend
   (captures the last frame in the browser and uses it as the next source still).
+- **Draft then finalize for Seedance 2.5.** Clips are made as 480p drafts
+  (28 credits per second, so about $1.40 per 10 s), one to four at a time.
+  Press Finalize on the keeper and kie.ai re-renders that exact draft at 1080p
+  (158 credits per second, about $7.90 per 10 s) with the same motion. Draft
+  ids stay valid for 7 days.
 
 It runs two ways from the same `public/index.html`:
 

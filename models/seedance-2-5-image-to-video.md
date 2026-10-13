@@ -23,10 +23,26 @@ request shape from 1.0.
 | `duration` | number (seconds) | e.g. `8`, sent as a number, not a string |
 | `resolution` | `480p`, `720p`, `1080p` | default 480p for drafts; pass `--resolution 1080p` for the final |
 
-## Script call
+| `draft` | bool | 480p only. The resulting task id can be rendered at 1080p for 7 days |
+| `generate_audio` | bool | default true; synchronized sound. `--no-audio` turns it off |
+
+## Draft, then final (the normal loop)
 
 ```
-python scripts/kie.py video --image generations/<slug>.png --prompt "..." --model 2.5 --duration 8 --resolution 480p --approve
+python scripts/kie.py video --image generations/<slug>.png --prompt "..." --model 2.5 --draft --duration 10 --approve
+python scripts/kie.py finalize --draft-task-id <task_id from the draft sidecar> --approve
+```
+
+`finalize` calls model `bytedance/seedance-2-5-draft` with
+`{"draft_task_id": ..., "resolution": "1080p", "output_format": "mp4"}`. No
+prompt or duration is sent; the draft's settings are reused, so the motion is
+identical. kie.ai publishes no separate rate for this render; the skill quotes
+the 1080p rate (158 credits per second) and the ledger stores the real charge.
+
+## Direct render (skips the draft)
+
+```
+python scripts/kie.py video --image generations/<slug>.png --prompt "..." --model 2.5 --duration 8 --resolution 720p --approve
 ```
 
 ## Notes

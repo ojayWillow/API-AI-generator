@@ -12,7 +12,8 @@ API
   GET  /api/state            credits, spend, caps, daily spend, generations, refs, jobs
   POST /api/refresh-credits  force a credit re-check
   POST /api/quote            {kind, model, duration, resolution}
-  POST /api/generate         {kind, prompt, model, count, ...}  -> starts 1..4 jobs
+  POST /api/generate         {kind, prompt, model, count, draft, ...}  -> starts 1..4 jobs
+  POST /api/finalize         {id: <draft task id>, approve}  -> renders a 2.5 draft at 1080p
   GET  /api/tasks?id=<job>   one job's status
   POST /api/item             {id, rating, note, hidden}  -> review metadata
   POST /api/upload           {name, data (base64), kind: ref|still} -> saves a file
@@ -310,6 +311,10 @@ def build_args(p: dict) -> list[str]:
                 args += [flag, str(p[k])]
         if p.get("seed") not in (None, "", -1, "-1"):
             args += ["--seed", str(int(p["seed"]))]
+        if p.get("draft"):
+            args.append("--draft")
+        if p.get("audio") is False:
+            args.append("--no-audio")
         if p.get("camera_fixed"):
             args.append("--camera-fixed")
         if p.get("approve"):
@@ -319,8 +324,43 @@ def build_args(p: dict) -> list[str]:
     return args
 
 
+def start_finalize(p: dict) -> dict:
+    draft_id = str(p.get("id") or "").strip()
+    if not draft_id:
+        raise ValueError("draft id is required")
+    args = ["finalize", "--draft-task-id", draft_id]
+    if p.get("name"):
+        args += ["--name", str(p["name"])]
+    if p.get("duration"):
+        args += ["--duration", str(p["duration"])]
+    if p.get("approve"):
+        args.append("--approve")
+    if p.get("override_cap"):
+        args.append("--override-cap")
+    job = {"id": uuid.uuid4().hex[:8], "kind": "final", "model": "2.5-final", "prompt": p.get("prompt") or "",
+           "status": "running", "kie_state": "rendering 1080p", "started_at": time.time(), "finished_at": None,
+           "result": None, "log": "", "parent_id": draft_id}
+    with JOBS_LOCK:
+        JOBS[job["id"]] = job
+
+    def worker() -> None:
+        try:
+            code, data, err = run_kie(args, timeout=2400)
+            job["result"], job["log"] = data, err[-4000:]
+            job["status"] = {0: "done", 2: "approval_required", 3: "cap_exceeded"}.get(code, "failed")
+        except Exception as e:  # noqa: BLE001
+            job["status"], job["result"] = "failed", {"ok": False, "error": str(e)}
+        finally:
+            job["finished_at"] = time.time()
+            CREDITS["checked_at"] = 0
+
+    threading.Thread(target=worker, daemon=True).start()
+    return job
+
+
 def start_jobs(p: dict) -> list[dict]:
-    count = max(1, min(4, int(p.get("count") or 1))) if p.get("kind") == "image" else 1
+    allow_multi = p.get("kind") == "image" or (p.get("kind") == "video" and p.get("draft"))
+    count = max(1, min(4, int(p.get("count") or 1))) if allow_multi else 1
     group = p.get("group") or uuid.uuid4().hex[:8]
     jobs = []
     for i in range(count):
@@ -371,12 +411,13 @@ def quote_cost(p: dict) -> dict:
     args = ["quote", "--kind", str(kind)]
     if p.get("model"):
         args += ["--model", str(p["model"])]
-    if kind == "video" and p.get("duration"):
+    if kind in ("video", "final") and p.get("duration"):
         args += ["--duration", str(p["duration"])]
     if p.get("resolution"):
-        args += ["--resolution", str(p["resolution"])]
+        args += ["--resolution", "480p" if (kind == "video" and p.get("draft")) else str(p["resolution"])]
     _, data, _ = run_kie(args, timeout=60)
-    count = max(1, min(4, int(p.get("count") or 1))) if kind == "image" else 1
+    allow_multi = kind == "image" or (kind == "video" and p.get("draft"))
+    count = max(1, min(4, int(p.get("count") or 1))) if allow_multi else 1
     if data.get("ok") and count > 1:
         data["count"] = count
         data["credits_est_total"] = data["credits_est"] * count
@@ -446,6 +487,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/generate":
                 jobs = start_jobs(body)
                 return self._json({"ok": True, "jobs": jobs, "job": jobs[0]})
+            if path == "/api/finalize":
+                job = start_finalize(body)
+                return self._json({"ok": True, "jobs": [job], "job": job})
             if path == "/api/item":
                 ok = apply_extras(str(body.get("id") or ""), body)
                 return self._json({"ok": ok, "error": None if ok else "item not found"}, 200 if ok else 404)

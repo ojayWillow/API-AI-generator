@@ -3,42 +3,42 @@
     "label": "POV (first person, vertical)",
     "aspect": "9:16",
     "image_model": "nano-banana-2",
-    "video_model": "pro",
+    "video_model": "2.5",
     "duration": 10,
     "still": "first-person POV shot, hands visible at the bottom of the frame, eye-level, 35mm lens, natural light, cinematic color grade, photorealistic, vertical 9:16",
-    "motion": "subtle handheld sway, slow forward drift, hands shift slightly, keep the first-person point of view, no camera cuts",
+    "motion": "subtle handheld sway, slow forward drift, hands shift slightly, ambient room sound, keep the first-person point of view, no camera cuts",
     "negative": "text, watermark, logo, extra fingers, distorted hands"
   },
   "app-demo": {
     "label": "App demo (readable UI on a phone)",
     "aspect": "9:16",
     "image_model": "gpt-image-2",
-    "video_model": "pro",
+    "video_model": "2.5",
     "duration": 5,
     "camera_fixed": true,
     "still": "over-the-shoulder shot of a hand holding a modern smartphone, screen fills the lower two thirds of the frame, clean app interface with large readable type, soft studio light, vertical 9:16",
-    "motion": "camera fixed, thumb taps the screen once, subtle screen glow change, keep all text readable, no camera movement",
+    "motion": "camera fixed, thumb taps the screen once, soft UI tap sound, subtle screen glow change, keep all text readable, no camera movement",
     "negative": "watermark, blurry text, cropped screen"
   },
   "cinematic": {
     "label": "Cinematic b-roll",
     "aspect": "9:16",
     "image_model": "nano-banana-2",
-    "video_model": "pro",
+    "video_model": "2.5",
     "duration": 10,
     "still": "cinematic still, anamorphic 40mm lens, shallow depth of field, volumetric light, rich film color grade, fine film grain, vertical 9:16",
-    "motion": "slow dolly-in, gentle ambient motion only, atmosphere drifts, no fast moves, no cuts",
+    "motion": "slow dolly-in, gentle ambient motion only, atmosphere drifts, soft ambient soundscape, no fast moves, no cuts",
     "negative": "text, watermark, logo, cartoon, low detail"
   },
   "product": {
     "label": "Product hero shot",
     "aspect": "1:1",
     "image_model": "nano-banana-2",
-    "video_model": "pro",
+    "video_model": "2.5",
     "duration": 5,
     "camera_fixed": true,
     "still": "studio product photography, the product centered on a seamless backdrop, soft key light with a gentle rim light, crisp focus, clean minimal composition",
-    "motion": "camera fixed, slow 360-degree turntable rotation of the product, soft light sweep across the surface",
+    "motion": "camera fixed, slow 360-degree turntable rotation of the product, soft light sweep across the surface, quiet studio ambience",
     "negative": "text, watermark, extra objects, hands"
   }
 }
