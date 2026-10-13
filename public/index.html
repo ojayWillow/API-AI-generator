@@ -342,7 +342,7 @@
   function renderChart(daily, spend) {
     const host = $("chart"); const W = host.clientWidth || 600, H = 220;
     const padL = 44, padR = 12, padT = 18, padB = 26;
-    const maxV = niceMax(Math.max(...daily.map(d => d.usd), 0.01));
+    const maxV = niceMax(Math.max(0, ...daily.map(d => d.usd)));
     const n = daily.length, band = (W - padL - padR) / n, bw = Math.min(24, band * 0.6);
     const y = v => padT + (H - padT - padB) * (1 - v / maxV);
     const base = H - padB;
@@ -351,7 +351,7 @@
     for (let t = 0; t <= 4; t++) {
       const v = maxV * t / 4, yy = y(v);
       g += `<line class="${t ? "grid" : "base"}" x1="${padL}" x2="${W - padR}" y1="${yy}" y2="${yy}"/>`;
-      g += `<text x="${padL - 6}" y="${yy + 4}" text-anchor="end">${v >= 1 ? "$" + v.toFixed(v % 1 ? 1 : 0) : v.toFixed(2)}</text>`;
+      g += `<text x="${padL - 6}" y="${yy + 4}" text-anchor="end">${v >= 1 ? "$" + v.toFixed(v % 1 ? 2 : 0) : "$" + v.toFixed(2)}</text>`;
     }
     let hits = "", bars = "";
     daily.forEach((d, i) => {
