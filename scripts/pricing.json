@@ -1,5 +1,5 @@
 {
-  "_note": "Estimated kie.ai credits per run. 1 credit = $0.005 ($5 per 1,000). The ledger records the real creditsConsumed after each job. Verify current rates at https://kie.ai/pricing and edit here.",
+  "_note": "kie.ai credits per run. 1 credit = $0.005 ($5 per 1,000). The ledger records the real creditsConsumed after each job. Seedance 2.5 rates are kie.ai's published beta rates for image/text input (no video input), per generated second. Verify at https://kie.ai/pricing and https://kie.ai/seedance-2-5",
   "image": {
     "nano-banana-2": {
       "id": "nano-banana-2",
@@ -14,17 +14,21 @@
     "pro": {
       "id": "bytedance/v1-pro-image-to-video",
       "credits_per_second": 14,
-      "durations": [5, 10]
+      "durations": [5, 10],
+      "resolutions": ["1080p"]
     },
     "lite": {
       "id": "bytedance/v1-lite-image-to-video",
       "credits_per_second": 10,
-      "durations": [5, 10]
+      "durations": [5, 10],
+      "resolutions": ["1080p"]
     },
     "2.5": {
       "id": "bytedance/seedance-2-5",
-      "credits_per_second": 20,
-      "durations": [4, 5, 6, 8, 10, 12]
+      "credits_per_second": { "480p": 28, "720p": 63, "1080p": 158 },
+      "durations": [4, 5, 6, 8, 10, 12, 15],
+      "resolutions": ["480p", "720p", "1080p"],
+      "default_resolution": "480p"
     }
   }
 }

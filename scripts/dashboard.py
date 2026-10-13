@@ -304,7 +304,8 @@ def build_args(p: dict) -> list[str]:
         if not (p.get("image") or "").strip():
             raise ValueError("a source still is required for video")
         args += ["--image", resolve_image(p["image"])]
-        for k, flag in (("model", "--model"), ("duration", "--duration"), ("name", "--name"), ("preset", "--preset")):
+        for k, flag in (("model", "--model"), ("duration", "--duration"), ("resolution", "--resolution"),
+                        ("name", "--name"), ("preset", "--preset")):
             if p.get(k):
                 args += [flag, str(p[k])]
         if p.get("seed") not in (None, "", -1, "-1"):
@@ -372,7 +373,7 @@ def quote_cost(p: dict) -> dict:
         args += ["--model", str(p["model"])]
     if kind == "video" and p.get("duration"):
         args += ["--duration", str(p["duration"])]
-    if kind == "image" and p.get("resolution"):
+    if p.get("resolution"):
         args += ["--resolution", str(p["resolution"])]
     _, data, _ = run_kie(args, timeout=60)
     count = max(1, min(4, int(p.get("count") or 1))) if kind == "image" else 1

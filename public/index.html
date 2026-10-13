@@ -207,7 +207,7 @@
 
           <h3>Model</h3>
           <select id="imgModel"><option value="nano-banana-2">Nano Banana 2 · fast, references</option><option value="gpt-image-2">GPT Image 2 · readable text</option></select>
-          <select id="vidModel" class="hidden"><option value="pro">Seedance 1.0 Pro · 14 cr/s</option><option value="lite">Seedance 1.0 Lite · 10 cr/s</option><option value="2.5">Seedance 2.5 · newest</option></select>
+          <select id="vidModel" class="hidden"><option value="pro">Seedance 1.0 Pro · 1080p · 14 cr/s</option><option value="lite">Seedance 1.0 Lite · 1080p · 10 cr/s</option><option value="2.5">Seedance 2.5 · 28 to 158 cr/s by resolution</option></select>
 
           <div id="imageOptions">
             <h3>References <span class="muted" id="refHint"></span></h3>
@@ -234,6 +234,7 @@
             <div class="chips" id="countChips"></div>
           </div>
           <div id="videoSettings" class="hidden">
+            <div id="vresWrap" class="hidden"><h3>Resolution</h3><div class="chips" id="vresChips"></div><div class="muted" id="vresNote" style="margin-top:4px"></div></div>
             <h3>Duration</h3>
             <div class="chips" id="durChips"></div>
             <div class="row" style="margin-top:10px">
@@ -305,7 +306,7 @@
   const fmtUsd = (v) => "$" + (Number(v) || 0).toFixed(2);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   let state = null, presets = {}, kind = "image", manualPrompt = false, tableOpen = false;
-  const settings = {aspect: "9:16", resolution: "1K", count: 1, duration: 10};
+  const settings = {aspect: "9:16", resolution: "1K", count: 1, duration: 10, vres: "480p"};
   let filter = {kind: "all", starred: false, rejected: false, q: ""};
   const jobs = new Map(), polling = new Set(), refSel = [], cmpSel = [];
   let source = null, parentId = null;
@@ -425,9 +426,16 @@
     chips("aspectChips", ["9:16", "16:9", "1:1", "4:5", "auto"], "aspect", {"9:16": "9:16 vertical", "16:9": "16:9", "1:1": "1:1", "4:5": "4:5", "auto": "auto"});
     chips("resChips", ["1K", "2K", "4K"], "resolution");
     chips("countChips", [1, 2, 3, 4], "count", {1: "1", 2: "2", 3: "3", 4: "4"});
-    const durs = $("vidModel").value === "2.5" ? [4, 5, 6, 8, 10, 12] : [5, 10];
+    const is25 = $("vidModel").value === "2.5";
+    const durs = is25 ? [4, 5, 6, 8, 10, 12, 15] : [5, 10];
     if (!durs.includes(settings.duration)) settings.duration = durs.includes(10) ? 10 : durs[0];
     chips("durChips", durs, "duration", Object.fromEntries(durs.map(d => [d, d + " s"])));
+    $("vresWrap").classList.toggle("hidden", !is25);
+    if (is25) {
+      const pr = state && state.pricing && state.pricing.video["2.5"], rate = pr ? pr.credits_per_second : {"480p": 28, "720p": 63, "1080p": 158};
+      chips("vresChips", ["480p", "720p", "1080p"], "vres", Object.fromEntries(Object.entries(rate).map(([r, c]) => [r, `${r} · ${c} cr/s`])));
+      $("vresNote").textContent = "Draft at 480p, then re-run the keeper at 1080p. 1080p costs about " + fmtUsd(rate["1080p"] * 0.005) + " per second.";
+    }
   }
   $("vidModel").onchange = () => { renderChips(); estimate(); };
   $("imgModel").onchange = () => { renderRefs(); estimate(); };
@@ -438,7 +446,12 @@
     const pr = state.pricing || {}, per = state.usd_per_credit || 0.005;
     let credits = 0, label = "";
     if (kind === "image") { const m = pr.image && pr.image[$("imgModel").value]; credits = m ? (m.credits[settings.resolution] || 0) * settings.count : 0; label = `${settings.count} still${settings.count > 1 ? "s" : ""} · ${settings.resolution}`; }
-    else { const m = pr.video && pr.video[$("vidModel").value]; credits = m ? m.credits_per_second * settings.duration : 0; label = `${settings.duration} s · 1080p`; }
+    else {
+      const m = pr.video && pr.video[$("vidModel").value];
+      const rate = m ? (typeof m.credits_per_second === "object" ? (m.credits_per_second[settings.vres] || 0) : m.credits_per_second) : 0;
+      const res = m && typeof m.credits_per_second === "object" ? settings.vres : "1080p";
+      credits = Math.round(rate * settings.duration); label = `${settings.duration} s · ${res}`;
+    }
     const usd = credits * per, left = state.spend ? Math.min(state.spend.remaining_today_usd, state.spend.remaining_month_usd) : null;
     $("costLabel").textContent = label + (left != null ? ` · ${fmtUsd(left)} left under cap` : "");
     $("cost").textContent = `${fmtUsd(usd)} · ${credits} cr`;
@@ -555,7 +568,7 @@
   function payload() {
     const base = {kind, prompt: $("prompt").value, negative: $("negative").value, fields: fields(), preset: $("preset").value || null, override_cap: $("overrideCap").checked, parent_id: parentId};
     if (kind === "image") return {...base, model: $("imgModel").value, aspect: settings.aspect, resolution: settings.resolution, count: settings.count, name: $("imgName").value || null, refs: refSel.map(r => r.ref)};
-    return {...base, image: $("still").value, model: $("vidModel").value, duration: settings.duration, seed: $("seed").value, camera_fixed: $("cameraFixed").checked, name: $("vidName").value || null, approve: $("approve").checked};
+    return {...base, image: $("still").value, model: $("vidModel").value, duration: settings.duration, resolution: $("vidModel").value === "2.5" ? settings.vres : "1080p", seed: $("seed").value, camera_fixed: $("cameraFixed").checked, name: $("vidName").value || null, approve: $("approve").checked};
   }
   async function submit(p) {
     const j = await api("/api/generate", p);
@@ -686,7 +699,7 @@
         const next = resOf() === "1K" ? "2K" : "4K"; toast(`Generating ${next} version…`);
         try { await submit({kind: "image", prompt: g.prompt, negative: g.negative || "", fields: g.fields || null, model: g.model === "gpt-image-2" ? "gpt-image-2" : "nano-banana-2", aspect: (g.params && g.params.aspect_ratio) || "9:16", resolution: next, count: 1, name: (g.name || "").replace(/\.[^.]+$/, "") + "-" + next, refs: g.model === "gpt-image-2" ? [] : [refOf(g)], parent_id: g.id, preset: g.preset || null}); showView("create"); } catch (e) { toast(e.message, 4000); }
         break; }
-      case "redo": setKind("video"); source = state.generations.find(x => refOf(x) === g.input_image || x.url === g.input_image || x.path === g.input_image) || {name: "previous still", url: g.input_image, prompt: ""}; renderSource(); $("still").value = g.input_image || ""; setFields(g.fields); if (!g.fields) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true); $("negative").value = g.negative || ""; $("vidModel").value = g.model || "pro"; settings.duration = (g.params && g.params.duration_s) || 10; $("seed").value = g.seed ?? -1; $("cameraFixed").checked = !!(g.params && g.params.camera_fixed); parentId = g.id; renderChips(); estimate(); toCreate(); toast("Loaded. Change the motion, approve, generate."); break;
+      case "redo": setKind("video"); source = state.generations.find(x => refOf(x) === g.input_image || x.url === g.input_image || x.path === g.input_image) || {name: "previous still", url: g.input_image, prompt: ""}; renderSource(); $("still").value = g.input_image || ""; setFields(g.fields); if (!g.fields) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true); $("negative").value = g.negative || ""; $("vidModel").value = g.model || "pro"; settings.duration = (g.params && g.params.duration_s) || 10; if (g.params && /p$/.test(g.params.resolution || "")) settings.vres = g.params.resolution; $("seed").value = g.seed ?? -1; $("cameraFixed").checked = !!(g.params && g.params.camera_fixed); parentId = g.id; renderChips(); estimate(); toCreate(); toast("Loaded. Change the motion, approve, generate."); break;
       case "extend": {
         toast("Capturing the last frame…");
         try {

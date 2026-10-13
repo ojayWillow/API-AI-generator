@@ -36,7 +36,7 @@ cap would be exceeded.
 | Image with readable text, signs, posters, app UI | `gpt-image-2` | `gpt-image-2-text-to-image` | ~$0.05 |
 | Video, default | `pro` | `bytedance/v1-pro-image-to-video` | 14 credits/s, $0.70 per 10 s |
 | Video, budget | `lite` | `bytedance/v1-lite-image-to-video` | 10 credits/s, $0.50 per 10 s |
-| Video, newest, only when the user asks for it | `2.5` | `bytedance/seedance-2-5` | see `scripts/pricing.json` |
+| Video, newest, only when the user asks for it | `2.5` | `bytedance/seedance-2-5` | 28 cr/s at 480p, 63 at 720p, 158 at 1080p ($7.90 per 10 s) |
 
 Read the matching recipe in `models/` before the first use of a model in a
 session. Seedance 1.0 accepts only 5 or 10 seconds; the script rounds other

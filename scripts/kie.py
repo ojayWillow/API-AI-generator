@@ -438,14 +438,26 @@ def normalise_duration(model: str, requested: float) -> tuple[int, str | None]:
     return nearest, f"{model} only supports {allowed}s; {requested}s rounded to {nearest}s"
 
 
-def quote_video(model: str, duration: float) -> dict:
+def video_resolution(model: str, requested: str | None) -> str:
+    pr = load_pricing()["video"][model]
+    allowed = pr.get("resolutions") or ["1080p"]
+    if requested in allowed:
+        return requested
+    return pr.get("default_resolution") or allowed[-1]
+
+
+def quote_video(model: str, duration: float, resolution: str | None = None) -> dict:
     pr = load_pricing()["video"]
     if model not in pr:
         die(f"unknown video model '{model}'. Options: {', '.join(pr)}")
     dur, note = normalise_duration(model, duration)
-    credits = pr[model]["credits_per_second"] * dur
+    res = video_resolution(model, resolution)
+    rate = pr[model]["credits_per_second"]
+    if isinstance(rate, dict):
+        rate = rate.get(res) or max(rate.values())
+    credits = int(rate * dur)
     q = {"kind": "video", "model": model, "model_id": pr[model]["id"], "duration_s": dur,
-         "resolution": "1080p", "credits_est": credits, "usd_est": round(credits * USD_PER_CREDIT, 4)}
+         "resolution": res, "credits_est": credits, "usd_est": round(credits * USD_PER_CREDIT, 4)}
     if note:
         q["note"] = note
     return q
@@ -470,7 +482,7 @@ def cmd_credits(_: argparse.Namespace) -> None:
 
 def cmd_quote(a: argparse.Namespace) -> None:
     q = quote_image(a.model or "nano-banana-2", a.resolution or "1K") if a.kind == "image" \
-        else quote_video(a.model or "pro", a.duration or 10)
+        else quote_video(a.model or "pro", a.duration or 10, a.resolution)
     out({"ok": True, **q, "spend": spend_summary()})
 
 
@@ -535,7 +547,7 @@ def cmd_upload(a: argparse.Namespace) -> None:
 
 def cmd_video(a: argparse.Namespace) -> None:
     model = a.model or "pro"
-    q = quote_video(model, a.duration or 10)
+    q = quote_video(model, a.duration or 10, a.resolution)
     s = enforce_caps(q["usd_est"], a.override_cap)
     if not a.approve:
         out({"ok": False, "approval_required": True,
@@ -551,18 +563,18 @@ def cmd_video(a: argparse.Namespace) -> None:
     image_url = ensure_url(a.image)
     if model == "2.5":
         inp = {"prompt": a.prompt, "first_frame_url": image_url, "aspect_ratio": "adaptive",
-               "duration": q["duration_s"], "resolution": "1080p"}
+               "duration": q["duration_s"], "resolution": q["resolution"]}
     else:
         inp = {"prompt": a.prompt, "image_url": image_url, "resolution": "1080p",
                "duration": str(q["duration_s"]), "camera_fixed": bool(a.camera_fixed), "seed": int(a.seed)}
     if q.get("note"):
         log(f"  {q['note']}")
-    log(f"Submitting video to {q['model_id']} ({q['duration_s']}s, ~{q['credits_est']} credits / ${q['usd_est']:.2f})")
+    log(f"Submitting video to {q['model_id']} ({q['duration_s']}s {q['resolution']}, ~{q['credits_est']} credits / ${q['usd_est']:.2f})")
     task_id = create_task(q["model_id"], inp)
     task = poll_task(task_id, every=15, timeout=1500)
     name = a.name or (still_local.stem if still_local else f"{dt.datetime.now():%Y%m%d-%H%M%S}-{slugify(a.prompt)}")
     finish("video", task, model, q["model_id"], a.prompt,
-           {"duration_s": q["duration_s"], "resolution": "1080p", "camera_fixed": bool(a.camera_fixed),
+           {"duration_s": q["duration_s"], "resolution": q["resolution"], "camera_fixed": bool(a.camera_fixed),
             "seed": int(a.seed)},
            name, "mp4", q["credits_est"],
            {"input_image": str(still_local or a.image), "input_image_url": image_url, "preset": a.preset})
@@ -612,7 +624,7 @@ def main() -> None:
     p.add_argument("--kind", choices=["image", "video"], required=True)
     p.add_argument("--model")
     p.add_argument("--duration", type=float)
-    p.add_argument("--resolution")
+    p.add_argument("--resolution", help="image: 1K/2K/4K; Seedance 2.5 video: 480p/720p/1080p")
     p.set_defaults(fn=cmd_quote)
 
     p = sub.add_parser("image")
@@ -636,6 +648,8 @@ def main() -> None:
     p.add_argument("--prompt", required=True, help="short motion description")
     p.add_argument("--model", choices=["pro", "lite", "2.5"])
     p.add_argument("--duration", type=float)
+    p.add_argument("--resolution", choices=["480p", "720p", "1080p"],
+                   help="Seedance 2.5 only: 480p draft (28 cr/s), 720p (63), 1080p (158). Pro/Lite are always 1080p")
     p.add_argument("--camera-fixed", action="store_true")
     p.add_argument("--seed", type=int, default=-1, help="-1 for random; reuse a seed to stay close to a previous clip")
     p.add_argument("--name")

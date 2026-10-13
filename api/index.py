@@ -39,9 +39,14 @@ PRICING = {
         "gpt-image-2": {"id": "gpt-image-2-text-to-image", "credits": {"1K": 10, "2K": 12, "4K": 16}},
     },
     "video": {
-        "pro": {"id": "bytedance/v1-pro-image-to-video", "credits_per_second": 14, "durations": [5, 10]},
-        "lite": {"id": "bytedance/v1-lite-image-to-video", "credits_per_second": 10, "durations": [5, 10]},
-        "2.5": {"id": "bytedance/seedance-2-5", "credits_per_second": 20, "durations": [4, 5, 6, 8, 10, 12]},
+        "pro": {"id": "bytedance/v1-pro-image-to-video", "credits_per_second": 14, "durations": [5, 10],
+                "resolutions": ["1080p"]},
+        "lite": {"id": "bytedance/v1-lite-image-to-video", "credits_per_second": 10, "durations": [5, 10],
+                 "resolutions": ["1080p"]},
+        # kie.ai beta rates for Seedance 2.5 with image/text input, per generated second
+        "2.5": {"id": "bytedance/seedance-2-5", "credits_per_second": {"480p": 28, "720p": 63, "1080p": 158},
+                "durations": [4, 5, 6, 8, 10, 12, 15], "resolutions": ["480p", "720p", "1080p"],
+                "default_resolution": "480p"},
     },
 }
 
@@ -402,8 +407,13 @@ def quote(p: dict) -> dict:
             raise ApiError("duration must be a number")
         allowed = pr["durations"]
         dur = int(req) if req in allowed else min(allowed, key=lambda a: (abs(a - req), a))
-        c = pr["credits_per_second"] * dur
-        q = {"kind": "video", "model": model, "model_id": pr["id"], "duration_s": dur, "resolution": "1080p",
+        resolutions = pr.get("resolutions") or ["1080p"]
+        res = p.get("resolution") if p.get("resolution") in resolutions else (pr.get("default_resolution") or resolutions[-1])
+        rate = pr["credits_per_second"]
+        if isinstance(rate, dict):
+            rate = rate.get(res) or max(rate.values())
+        c = int(rate * dur)
+        q = {"kind": "video", "model": model, "model_id": pr["id"], "duration_s": dur, "resolution": res,
              "credits_est": c, "usd_est": round(c * USD_PER_CREDIT, 4)}
         if dur != req:
             q["note"] = f"{model} only supports {allowed}s; {req:g}s rounded to {dur}s"
@@ -465,11 +475,11 @@ def generate(p: dict) -> list[dict]:
             raise ApiError("source still must be a public URL; click Animate on a gallery image")
         if q["model"] == "2.5":
             inp = {"prompt": full_prompt, "first_frame_url": image, "aspect_ratio": "adaptive",
-                   "duration": q["duration_s"], "resolution": "1080p"}
+                   "duration": q["duration_s"], "resolution": q["resolution"]}
         else:
             inp = {"prompt": full_prompt, "image_url": image, "resolution": "1080p", "duration": str(q["duration_s"]),
                    "camera_fixed": bool(p.get("camera_fixed")), "seed": seed}
-        params = {"duration_s": q["duration_s"], "resolution": "1080p", "camera_fixed": bool(p.get("camera_fixed")),
+        params = {"duration_s": q["duration_s"], "resolution": q["resolution"], "camera_fixed": bool(p.get("camera_fixed")),
                   "seed": seed}
         input_image = image
 
