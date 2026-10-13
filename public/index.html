@@ -212,7 +212,8 @@
           <div id="imageOptions">
             <h3>References <span class="muted" id="refHint"></span></h3>
             <div class="refs" id="refs"></div>
-            <input type="file" id="refFile" accept="image/*" multiple class="hidden">
+            <div class="muted" style="margin-top:4px">Click + or drop images here. Photos are resized in the browser before upload. HEIC is not supported.</div>
+            <input type="file" id="refFile" accept="image/png,image/jpeg,image/webp,image/gif" multiple class="hidden">
           </div>
           <div id="videoOptions" class="hidden">
             <h3>Source still</h3>
@@ -315,7 +316,9 @@
 
   async function api(path, body) {
     const r = await fetch(path, body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {cache: "no-store"});
-    return r.json();
+    const text = await r.text();
+    try { return JSON.parse(text); }
+    catch { return {ok: false, error: r.status === 413 ? "The upload is too large for the server (4.5 MB limit)." : `HTTP ${r.status}: ${text.slice(0, 80)}`}; }
   }
   function toast(msg, ms = 2600) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms); }
   const refOf = (g) => state && state.mode === "local" && g.path ? g.path : g.url;
@@ -535,30 +538,53 @@
     renderRefs();
   }
   $("refFile").onchange = async (ev) => {
-    for (const f of [...ev.target.files]) { try { const up = await uploadImage(f, f.name.replace(/\.[^.]+$/, ""), "ref"); state.refs.unshift({name: up.name, url: up.url, path: up.path}); toggleRef({ref: refOf(up), url: up.url, name: up.name, path: up.path || null}); toast(`Uploaded ${up.name}`); } catch (e) { toast("Upload failed: " + e.message, 4000); } }
+    for (const f of [...ev.target.files]) { try { toast(`Uploading ${f.name}…`, 8000); const up = await uploadImage(f, f.name.replace(/\.[^.]+$/, ""), "ref"); state.refs.unshift({name: up.name, url: up.url, path: up.path}); toggleRef({ref: refOf(up), url: up.url, name: up.name, path: up.path || null}); toast(`Uploaded ${up.name}`); } catch (e) { toast("Upload failed: " + e.message, 6000); } }
     ev.target.value = "";
   };
-  function fileToDataUrl(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); }); }
-  async function downscale(dataUrl, max = 2048) {
-    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl; });
+  const UPLOAD_LIMIT = 3.0 * 1024 * 1024;   // data-URL bytes; Vercel refuses request bodies over 4.5 MB
+  function fileToDataUrl(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error("could not read the file")); r.readAsDataURL(file); }); }
+  function loadImage(dataUrl) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("the browser cannot decode this image (HEIC and RAW are not supported; export it as JPEG or PNG)")); i.src = dataUrl; }); }
+  async function downscale(dataUrl, max = 2048, quality = 0.9) {
+    const img = await loadImage(dataUrl);
     const scale = Math.min(1, max / Math.max(img.width, img.height));
-    const c = document.createElement("canvas"); c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(img.width * scale)); c.height = Math.max(1, Math.round(img.height * scale));
     c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-    return c.toDataURL("image/jpeg", 0.9);
+    return c.toDataURL("image/jpeg", quality);
+  }
+  async function fitForUpload(dataUrl, keepPng) {
+    // Keep PNG/JPEG under the limit and at most 2048 px on the long side; otherwise re-encode smaller until it fits.
+    const img = await loadImage(dataUrl);
+    const longSide = Math.max(img.width, img.height);
+    if (keepPng && dataUrl.length <= UPLOAD_LIMIT && longSide <= 2048) return dataUrl;
+    let max = Math.min(2048, longSide), q = 0.9;
+    for (let i = 0; i < 8; i++) {
+      const out = await downscale(dataUrl, max, q);
+      if (out.length <= UPLOAD_LIMIT) return out;
+      q -= 0.1;
+      if (q < 0.6) { q = 0.85; max = Math.round(max * 0.75); }
+    }
+    throw new Error("the image is too large even after downscaling");
   }
   async function uploadImage(file, name, kindOfUpload) {
-    let dataUrl = await fileToDataUrl(file);
-    if (file.size > 3.5 * 1024 * 1024 || !/^image\/(png|jpeg)/.test(file.type)) dataUrl = await downscale(dataUrl);
+    if (/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name)) throw new Error("HEIC photos are not supported by the browser. Export as JPEG or PNG first.");
+    if (!/^image\//.test(file.type)) throw new Error("not an image file");
+    const dataUrl = await fitForUpload(await fileToDataUrl(file), /^image\/(png|jpeg)/.test(file.type));
     const r = await api("/api/upload", {name, data: dataUrl, kind: kindOfUpload});
     if (!r.ok) throw new Error(r.error || "upload failed");
     return r;
   }
   async function uploadDataUrl(dataUrl, name, kindOfUpload) {
-    if (dataUrl.length > 4.6 * 1024 * 1024) dataUrl = await downscale(dataUrl, 1920);
-    const r = await api("/api/upload", {name, data: dataUrl, kind: kindOfUpload});
+    const r = await api("/api/upload", {name, data: await fitForUpload(dataUrl, true), kind: kindOfUpload});
     if (!r.ok) throw new Error(r.error || "upload failed");
     return r;
   }
+  // drag and drop onto the reference strip
+  $("refs").addEventListener("dragover", (e) => { e.preventDefault(); $("refs").style.outline = "2px dashed var(--accent)"; });
+  $("refs").addEventListener("dragleave", () => { $("refs").style.outline = ""; });
+  $("refs").addEventListener("drop", async (e) => {
+    e.preventDefault(); $("refs").style.outline = "";
+    for (const f of [...(e.dataTransfer.files || [])]) { try { toast(`Uploading ${f.name}…`, 8000); const up = await uploadImage(f, f.name.replace(/\.[^.]+$/, ""), "ref"); state.refs.unshift({name: up.name, url: up.url, path: up.path}); toggleRef({ref: refOf(up), url: up.url, name: up.name, path: up.path || null}); toast(`Uploaded ${up.name}`); } catch (err) { toast("Upload failed: " + err.message, 6000); } }
+  });
 
   // ---------- video source ----------
   function renderSource() {
