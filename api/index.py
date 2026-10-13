@@ -171,22 +171,41 @@ def blob_read_json(url: str):
 # ---------------------------------------------------------------------------
 # ledger
 # ---------------------------------------------------------------------------
+def dedupe(entries: list[dict]) -> list[dict]:
+    """One ledger row per kie task. A second finalize of the same task must never double-count spend."""
+    seen: set = set()
+    out = []
+    for e in entries:
+        key = e.get("task_id") or id(e)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(e)
+    return out
+
+
 def ledger_read() -> list[dict]:
     blobs = [b for b in blob_list("ledger.json", 5) if b.get("pathname") == "ledger.json"]
     if not blobs:
         return []
     data = blob_read_json(blobs[0]["url"])
-    return data if isinstance(data, list) else []
+    return dedupe(data) if isinstance(data, list) else []
 
 
 def ledger_write(entries: list[dict]) -> None:
-    blob_put("ledger.json", json.dumps(entries, ensure_ascii=False).encode("utf-8"), "application/json", max_age=60)
+    blob_put("ledger.json", json.dumps(dedupe(entries), ensure_ascii=False).encode("utf-8"), "application/json", max_age=60)
 
 
-def ledger_append(entry: dict) -> None:
+def ledger_append(entry: dict) -> bool:
     entries = ledger_read()
+    if any(e.get("task_id") == entry.get("task_id") for e in entries):
+        return False
     entries.append(entry)
     ledger_write(entries)
+    return True
+
+
+FINALIZING: set = set()  # per warm instance, blocks concurrent finalization of one task
 
 
 EXTRA_KEYS = ("group", "negative", "fields", "seed", "parent_id", "refs", "rating", "note", "hidden", "variant")
@@ -589,10 +608,14 @@ def poll_task(task_id: str) -> dict:
         blob_delete([url])
         return {"ok": True, "job": job}
 
-    # success: guard against two pollers finalizing at once
-    if job.get("finalizing_at") and time.time() - job["finalizing_at"] < 300:
+    # success: guard against two pollers finalizing at once (in-memory for a warm instance, blob flag otherwise)
+    if task_id in FINALIZING or (job.get("finalizing_at") and time.time() - job["finalizing_at"] < 300):
         job["kie_state"] = "saving"
         return {"ok": True, "job": job}
+    if any(e.get("task_id") == task_id for e in ledger_read()):
+        blob_delete([url])
+        return {"ok": False, "gone": True, "error": "already saved"}
+    FINALIZING.add(task_id)
     job["finalizing_at"] = time.time()
     task_save(job)
 
@@ -609,7 +632,11 @@ def poll_task(task_id: str) -> dict:
     ext = (urllib.parse.urlparse(src).path.rsplit(".", 1)[-1] or "").lower()
     if ext not in {"png", "jpg", "jpeg", "webp", "mp4", "mov", "webm"}:
         ext = "png" if job["kind"] == "image" else "mp4"
-    data = http("GET", src, raw=True, timeout=240)
+    try:
+        data = http("GET", src, raw=True, timeout=240)
+    except ApiError:
+        FINALIZING.discard(task_id)
+        raise
     pathname = f"generations/{job['name']}-{task_id[-6:]}.{ext}"
     ctype = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp",
              "mp4": "video/mp4", "mov": "video/quicktime", "webm": "video/webm"}[ext]
@@ -627,8 +654,11 @@ def poll_task(task_id: str) -> dict:
     }
     for k in ("group", "negative", "fields", "seed", "parent_id", "refs", "variant"):
         entry[k] = job.get(k)
-    ledger_append(entry)
-    blob_delete([url])
+    try:
+        ledger_append(entry)
+        blob_delete([url])
+    finally:
+        FINALIZING.discard(task_id)
     job.update(status="done", kie_state="success", finished_at=time.time(),
                result={"ok": True, "url": entry["url"], "file": entry["name"], "media": media,
                        "credits_consumed": consumed, "usd": entry["usd"]})

@@ -647,7 +647,7 @@
           <button class="ghost act rej ${g.rating === "reject" ? "on" : ""}" data-a="reject" title="Reject">✕</button>
           <button class="ghost act" data-a="note">Note</button>
           <button class="ghost act ${cmpSel.includes(g.id) ? "on" : ""}" data-a="cmp" title="Select for compare">Cmp</button>
-          <a class="ghost" href="${esc(g.url)}" target="_blank" rel="noopener" download>↓</a>
+          <button class="ghost act" data-a="download" title="Save to your device">Save</button>
         </div>
         <div class="btns">${follow}${g.path ? `<button class="ghost act" data-a="copy">Path</button>` : ""}</div>
       </div></div>`;
@@ -727,6 +727,7 @@
       case "cmp": { const i = cmpSel.indexOf(g.id); if (i >= 0) cmpSel.splice(i, 1); else { if (cmpSel.length >= 2) cmpSel.shift(); cmpSel.push(g.id); } $("compareBtn").classList.toggle("hidden", cmpSel.length !== 2); renderFeed(); renderBoard(); if (cmpSel.length === 2) toast("Two selected. Compare is in the Library toolbar.", 2000); break; }
       case "pick": { const sibs = state.generations.filter(x => x.group === g.group && x.id !== g.id); await setItem(g, {rating: "star", hidden: false}); for (const s of sibs) if (s.rating !== "star") await setItem(s, {rating: "reject", hidden: true}); toast("Picked. The others are rejected."); break; }
       case "copy": try { await navigator.clipboard.writeText(g.path); toast("Path copied"); } catch { prompt("Path", g.path); } break;
+      case "download": await saveFile(g); break;
       case "showfinal": { const f = state.generations.find(x => x.parent_id === g.id && x.model === "2.5-final"); if (f) openModal([g, f]); break; }
       case "finalize": {
         const dur = (g.params && g.params.duration_s) || 0;
@@ -765,6 +766,22 @@
         break; }
     }
   }
+  async function saveFile(g) {
+    const name = g.name || (g.kind === "video" ? "clip.mp4" : "image.png");
+    toast(`Preparing ${name}…`, 8000);
+    try {
+      const r = await fetch(g.url, {mode: "cors"});
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const blob = await r.blob();
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      toast(`Saved ${name} to your downloads`);
+    } catch (e) {
+      window.open(g.url, "_blank", "noopener");
+      toast("Opened in a new tab. Use the browser's Save as, or long-press on a phone.", 6000);
+    }
+  }
   function lastFrame(url) {
     return new Promise((res, rej) => {
       const v = document.createElement("video"); v.crossOrigin = "anonymous"; v.muted = true; v.preload = "auto"; v.src = url;
@@ -774,7 +791,8 @@
     });
   }
   function openModal(items) {
-    $("modalBody").innerHTML = `<div class="pair ${items.length === 1 ? "single" : ""}">` + items.map(g => `<div>${g.kind === "video" ? `<video src="${esc(g.url)}" controls autoplay muted loop></video>` : `<img src="${esc(g.url)}" alt="">`}<div class="cap"><b>${esc(g.name)}</b> · ${esc(g.model || "")} · ${g.usd != null ? fmtUsd(g.usd) : ""}${g.media && g.media.width ? ` · ${g.media.width}x${g.media.height}` : ""}<br>${esc(g.prompt || "")}${g.note ? `<br><i>${esc(g.note)}</i>` : ""}</div></div>`).join("") + `</div>`;
+    $("modalBody").innerHTML = `<div class="pair ${items.length === 1 ? "single" : ""}">` + items.map(g => `<div>${g.kind === "video" ? `<video src="${esc(g.url)}" controls autoplay muted loop></video>` : `<img src="${esc(g.url)}" alt="">`}<div class="cap"><b>${esc(g.name)}</b> · ${esc(g.model || "")} · ${g.usd != null ? fmtUsd(g.usd) : ""}${g.media && g.media.width ? ` · ${g.media.width}x${g.media.height}` : ""} <button class="ghost modal-save" data-id="${esc(g.id)}" style="margin-left:8px">Save</button><br>${esc(g.prompt || "")}${g.note ? `<br><i>${esc(g.note)}</i>` : ""}</div></div>`).join("") + `</div>`;
+    $("modalBody").querySelectorAll(".modal-save").forEach(b => b.onclick = () => saveFile(state.generations.find(x => x.id === b.dataset.id)));
     $("modal").classList.add("on");
   }
   $("modalClose").onclick = () => $("modal").classList.remove("on");
