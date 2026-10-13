@@ -34,6 +34,7 @@ import sys
 import threading
 import time
 import urllib.parse
+import urllib.request
 import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -68,6 +69,10 @@ def run_kie(args: list[str], timeout: int = 1800) -> tuple[int, dict, str]:
 
 def key_present() -> bool:
     k = os.environ.get("KIE_API_KEY", "").strip()
+    if not k or k.startswith("your_"):
+        os.environ.pop("KIE_API_KEY", None)
+        kie.load_env()  # pick up a key saved to .env after the dashboard started
+        k = os.environ.get("KIE_API_KEY", "").strip()
     return bool(k) and not k.startswith("your_")
 
 
@@ -552,7 +557,24 @@ def main() -> None:
         os.environ["GENERATIONS_DIR"] = a.generations
     kie.load_env()
     url = f"http://127.0.0.1:{a.port}"
-    srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
+    try:  # already running? reuse it instead of starting a second copy
+        with urllib.request.urlopen(url + "/api/state", timeout=2) as r:
+            if r.status == 200:
+                print(f"generate dashboard is already running: {url}", flush=True)
+                if a.open:
+                    webbrowser.open(url)
+                return
+    except Exception:  # noqa: BLE001
+        pass
+
+    class Server(ThreadingHTTPServer):
+        allow_reuse_address = os.name != "nt"  # on Windows reuse lets several copies share a port
+
+    try:
+        srv = Server(("127.0.0.1", a.port), Handler)
+    except OSError as e:
+        print(f"cannot start on port {a.port}: {e}. Is another program using it? Try --port 8790", flush=True)
+        sys.exit(1)
     print(f"generate dashboard: {url}  (generations: {kie.gen_dir()})", flush=True)
     if not key_present():
         print("warning: KIE_API_KEY is not set; the dashboard will show the ledger but cannot generate", flush=True)
