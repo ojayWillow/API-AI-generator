@@ -3,46 +3,137 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Generate dashboard</title>
+<title>Generate studio</title>
 <style>
   :root {
-    color-scheme: light;
-    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
-    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
-    --series: #2a78d6; --series-track: #cde2fb;
-    --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --good-text: #006300; --star: #eda100;
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #161616; --surface-2: #1f1f1f; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series: #3987e5; --series-track: #184f95; --accent: #3987e5;
+    --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --good-text: #0ca30c; --star: #eda100;
+    --side: 200px; --controls: 380px;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      color-scheme: dark;
-      --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7;
-      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
-      --series: #3987e5; --series-track: #184f95; --good-text: #0ca30c; --star: #c98500;
+  @media (prefers-color-scheme: light) {
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f1f1ee; --ink: #0b0b0b; --ink-2: #52514e;
+      --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10); --series: #2a78d6; --series-track: #cde2fb; --accent: #2a78d6; --good-text: #006300;
     }
   }
-  :root[data-theme="dark"] {
-    color-scheme: dark;
-    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7;
-    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
-    --series: #3987e5; --series-track: #184f95; --good-text: #0ca30c; --star: #c98500;
-  }
-
   * { box-sizing: border-box; }
-  html, body { margin: 0; }
-  body { background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 20px 16px 48px; }
-  main { max-width: 1280px; margin: 0 auto; }
-  h1 { font-size: 20px; margin: 0; font-weight: 600; }
-  h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
-  h3 { font-size: 12px; margin: 14px 0 6px; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
   a { color: inherit; }
-  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+  h3 { font-size: 11px; margin: 14px 0 6px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
   .sub { color: var(--ink-2); font-size: 13px; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-  .grid { display: grid; gap: 12px; }
-  .tiles { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 12px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .hidden { display: none !important; }
+
+  /* shell */
+  .app { display: grid; grid-template-columns: var(--side) 1fr; min-height: 100vh; }
+  .side { background: var(--surface); border-right: 1px solid var(--border); padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; }
+  .brand { font-weight: 700; font-size: 15px; padding: 6px 10px 14px; letter-spacing: .02em; }
+  .nav { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; color: var(--ink-2); cursor: pointer; border: none; background: none; font: inherit; text-align: left; width: 100%; }
+  .nav svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .nav.on { background: var(--surface-2); color: var(--ink); }
+  .nav:hover { color: var(--ink); }
+  .side .foot { margin-top: auto; font-size: 12px; color: var(--muted); padding: 10px; }
+  .main { min-width: 0; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--page); z-index: 10; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 13px; background: var(--surface); }
+  .pill b { font-weight: 600; }
+  .pill a { color: var(--accent); text-decoration: none; font-size: 12px; }
+  .view { padding: 16px 20px 60px; }
+  .banner { border-left: 3px solid var(--warning); background: var(--surface); padding: 10px 14px; margin-bottom: 14px; border-radius: 6px; }
+  .banner code { background: var(--page); padding: 1px 5px; border-radius: 4px; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--page); padding: 9px 14px; border-radius: 8px; font-size: 13px; z-index: 50; display: none; max-width: 90vw; }
+
+  /* create layout */
+  .create { display: grid; grid-template-columns: var(--controls) 1fr; gap: 16px; align-items: start; }
+  .controls { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; position: sticky; top: 64px; max-height: calc(100vh - 80px); overflow: auto; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--page); }
+  .seg.full { display: flex; }
+  .seg button { background: none; border: none; padding: 7px 12px; color: var(--ink-2); cursor: pointer; font: inherit; flex: 1; }
+  .seg button.on { background: var(--surface-2); color: var(--ink); font-weight: 600; }
+  .seg.mode button.on { background: var(--accent); color: #fff; }
+  label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
+  input[type=text], input[type=number], input[type=search], select, textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--page); color: var(--ink); font: inherit;
+  }
+  textarea { resize: vertical; }
+  textarea.prompt { min-height: 120px; font-size: 14px; padding: 12px; line-height: 1.5; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .row.one { grid-template-columns: 1fr; }
+  .row.three { grid-template-columns: 1fr 1fr 1fr; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { border: 1px solid var(--border); border-radius: 20px; padding: 5px 11px; font-size: 12px; color: var(--ink-2); background: var(--page); cursor: pointer; }
+  .chip.on { border-color: var(--accent); color: var(--ink); background: var(--surface-2); }
+  .drop { border: 1px dashed var(--border); border-radius: 10px; padding: 10px; display: flex; gap: 10px; align-items: center; min-height: 72px; background: var(--page); }
+  .drop img { width: 44px; height: 60px; object-fit: cover; border-radius: 4px; background: var(--surface-2); }
+  .drop .grow { flex: 1; min-width: 0; }
+  .refs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ref { position: relative; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 2px solid transparent; cursor: pointer; background: var(--surface-2); }
+  .ref img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .ref.on { border-color: var(--accent); }
+  .ref.add { display: flex; align-items: center; justify-content: center; border: 1px dashed var(--border); color: var(--ink-2); font-size: 20px; }
+  details { border-top: 1px solid var(--grid); margin-top: 12px; padding-top: 8px; }
+  summary { cursor: pointer; font-size: 12px; color: var(--ink-2); list-style: none; display: flex; align-items: center; gap: 6px; }
+  summary::before { content: "▸"; font-size: 11px; }
+  details[open] summary::before { content: "▾"; }
+  details .inner { padding-top: 10px; }
+  .check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
+  .linkbtn { background: none; border: none; color: var(--ink-2); text-decoration: underline; cursor: pointer; font: inherit; font-size: 12px; padding: 0; }
+  .footer { position: sticky; bottom: -14px; background: var(--surface); padding: 12px 0 2px; margin-top: 12px; border-top: 1px solid var(--grid); }
+  .cost { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--ink-2); margin-bottom: 8px; gap: 8px; }
+  .cost b { color: var(--ink); font-size: 14px; }
+  button.primary { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 11px 14px; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; }
+  button.primary:disabled { opacity: .45; cursor: not-allowed; }
+  button.ghost, a.ghost { background: none; border: 1px solid var(--border); color: var(--ink); border-radius: 8px; padding: 6px 11px; font: inherit; font-size: 12px; cursor: pointer; text-decoration: none; display: inline-block; }
+  button.ghost.on { border-color: var(--accent); color: var(--accent); }
+  .msg { font-size: 12px; color: var(--ink-2); margin-top: 6px; min-height: 16px; }
+
+  /* feed */
+  .feed { display: grid; gap: 14px; }
+  .feed-head { display: flex; justify-content: space-between; align-items: center; color: var(--ink-2); font-size: 13px; }
+  .gen { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .gen .top { display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; font-size: 12px; color: var(--ink-2); border-bottom: 1px solid var(--grid); }
+  .gen .top .p { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gen .items { display: grid; gap: 10px; padding: 12px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+  .gen.running .items { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+  .skel { aspect-ratio: 9 / 14; border-radius: 8px; background: linear-gradient(100deg, var(--surface-2) 30%, var(--grid) 50%, var(--surface-2) 70%); background-size: 200% 100%; animation: sh 1.6s infinite; display: flex; align-items: flex-end; padding: 8px; font-size: 12px; color: var(--ink-2); }
+  @keyframes sh { from { background-position: 200% 0 } to { background-position: -200% 0 } }
+  .item { background: var(--surface-2); border: 1px solid transparent; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; position: relative; }
+  .item.starred { border-color: var(--star); }
+  .item.rejected { opacity: .5; }
+  .item.cmp { outline: 2px solid var(--accent); }
+  .item .media { background: var(--page); aspect-ratio: 9 / 14; display: flex; align-items: center; justify-content: center; cursor: zoom-in; }
+  .item img, .item video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .item .body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+  .item .prompt { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .meta { color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
+  .item .note { color: var(--ink-2); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .btns { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+  .item .btns button, .item .btns a { font-size: 11px; padding: 3px 7px; border-radius: 6px; }
+  .item .btns button.star.on { border-color: var(--star); color: var(--star); }
+  .item .btns button.rej.on { border-color: var(--critical); color: var(--critical); }
+  .badge { position: absolute; top: 6px; left: 6px; font-size: 11px; background: rgba(0,0,0,.6); color: #fff; padding: 2px 6px; border-radius: 4px; }
+  .state { position: absolute; top: 6px; right: 6px; font-size: 11px; background: rgba(0,0,0,.6); color: #fff; padding: 2px 6px; border-radius: 4px; }
+  .empty { color: var(--muted); padding: 40px; text-align: center; background: var(--surface); border: 1px dashed var(--border); border-radius: 12px; }
+
+  /* library */
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .toolbar input[type=search] { width: 240px; }
+  .board { display: grid; gap: 14px; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+
+  /* spend */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
   .tile .label { color: var(--ink-2); font-size: 13px; }
   .tile .value { font-size: 28px; font-weight: 600; margin: 4px 0 2px; }
-  .tile.hero .value { font-size: 48px; line-height: 1.1; }
+  .tile.hero .value { font-size: 44px; line-height: 1.1; }
   .tile .note { color: var(--muted); font-size: 12px; }
   .meter { height: 8px; border-radius: 4px; background: var(--series-track); overflow: hidden; margin: 8px 0 6px; }
   .meter > div { height: 100%; background: var(--series); border-radius: 4px; }
@@ -52,16 +143,8 @@
   .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
   .status.warn::before { background: var(--warning); }
   .status.over::before { background: var(--critical); }
-  .two { grid-template-columns: 3fr 2fr; margin-bottom: 12px; }
-  .cols { grid-template-columns: 3fr 2fr; }
-  @media (max-width: 900px) { .two, .cols { grid-template-columns: 1fr; } }
-
-  .banner { border-left: 3px solid var(--warning); padding: 10px 14px; margin-bottom: 12px; }
-  .banner code { background: var(--page); padding: 1px 5px; border-radius: 4px; }
-  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--page); padding: 9px 14px; border-radius: 8px; font-size: 13px; z-index: 50; display: none; max-width: 90vw; }
-
   .chart-wrap { position: relative; }
-  .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
   svg text { font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--muted); }
   svg .lbl { fill: var(--ink-2); font-weight: 600; }
   svg .grid { stroke: var(--grid); stroke-width: 1; }
@@ -69,209 +152,151 @@
   svg .bar { fill: var(--series); pointer-events: none; }
   svg .hit { fill: transparent; }
   svg .hit:hover { fill: var(--grid); opacity: .5; }
-  .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.12); display: none; z-index: 5; }
+  .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.3); display: none; z-index: 5; }
   .tip b { display: block; color: var(--ink); }
   .tip span { color: var(--ink-2); }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .linkbtn { background: none; border: none; color: var(--ink-2); text-decoration: underline; cursor: pointer; font: inherit; font-size: 12px; padding: 0; }
 
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-  .row.one { grid-template-columns: 1fr; }
-  .row.three { grid-template-columns: 1fr 1fr 1fr; }
-  label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 3px; }
-  input[type=text], input[type=number], input[type=search], select, textarea {
-    width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--page); color: var(--ink); font: inherit;
-  }
-  textarea { min-height: 60px; resize: vertical; }
-  textarea.final { min-height: 86px; font-size: 13px; }
-  textarea.big { min-height: 110px; font-size: 15px; padding: 12px; }
-  .panel { border-top: 1px solid var(--grid); margin-top: 12px; padding-top: 12px; }
-  button.ghost.open { border-color: var(--series); color: var(--series); }
-  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-  .seg button { background: none; border: none; padding: 6px 12px; color: var(--ink-2); cursor: pointer; font: inherit; }
-  .seg button.on { background: var(--series); color: #fff; }
-  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
-  button.primary { background: var(--series); color: #fff; border: none; border-radius: 6px; padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
-  button.primary:disabled { opacity: .45; cursor: not-allowed; }
-  button.ghost, a.ghost, label.ghost { background: none; border: 1px solid var(--border); color: var(--ink); border-radius: 6px; padding: 7px 12px; font: inherit; cursor: pointer; text-decoration: none; display: inline-block; }
-  button.ghost.on { border-color: var(--series); color: var(--series); }
-  button.ghost.small, a.ghost.small { font-size: 12px; padding: 4px 9px; }
-  .check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
-  .quote { font-size: 13px; color: var(--ink-2); margin-top: 8px; min-height: 18px; }
-  .quote b { color: var(--ink); }
-  .hidden { display: none !important; }
-  .create-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
-  .create-head select { width: auto; min-width: 220px; }
-  .preset-frag { font-size: 12px; color: var(--muted); margin: -4px 0 10px; }
-  .source { display: flex; gap: 10px; align-items: center; border: 1px dashed var(--border); border-radius: 8px; padding: 8px; margin-bottom: 10px; min-height: 64px; }
-  .source .x { margin-left: auto; }
-  .source img { width: 44px; height: 60px; object-fit: cover; border-radius: 4px; background: var(--page); }
-  .source .muted { color: var(--muted); font-size: 12px; }
-  .refs { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
-  .ref { position: relative; width: 64px; height: 64px; border-radius: 6px; overflow: hidden; border: 2px solid transparent; cursor: pointer; background: var(--page); }
-  .ref img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .ref.on { border-color: var(--series); }
-  .ref .x { position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,.55); color: #fff; border: none; border-radius: 4px; font-size: 11px; width: 18px; height: 18px; cursor: pointer; display: none; }
-  .ref:hover .x { display: block; }
-  .ref.add { display: flex; align-items: center; justify-content: center; border: 1px dashed var(--border); color: var(--ink-2); font-size: 22px; }
-
-  .jobs { display: grid; gap: 8px; max-height: 260px; overflow: auto; }
-  .job { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; }
-  .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border); color: var(--ink-2); white-space: nowrap; }
-  .pill.running { border-color: var(--series); color: var(--series); }
-  .pill.done { border-color: var(--good); color: var(--good-text); }
-  .pill.failed, .pill.cap_exceeded { border-color: var(--critical); color: var(--critical); }
-  .pill.approval_required { border-color: var(--warning); }
-  .job .msg { color: var(--ink-2); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
-
-  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
-  .toolbar input[type=search] { width: 220px; }
-  .board { display: grid; gap: 12px; }
-  .set { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface); }
-  .set .set-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--ink-2); }
-  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
-  .item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; position: relative; }
-  .item.starred { border-color: var(--star); }
-  .item.rejected { opacity: .55; }
-  .item.cmp { outline: 2px solid var(--series); }
-  .item .media { background: var(--page); aspect-ratio: 9 / 12; display: flex; align-items: center; justify-content: center; cursor: zoom-in; }
-  .item img, .item video { width: 100%; height: 100%; object-fit: contain; display: block; }
-  .item .body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-  .item .prompt { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .item .meta { color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
-  .item .note { color: var(--ink-2); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .item .btns { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
-  .item .btns button, .item .btns a { font-size: 11px; padding: 3px 7px; }
-  .item .btns button.star.on { border-color: var(--star); color: var(--star); }
-  .item .btns button.rej.on { border-color: var(--critical); color: var(--critical); }
-  .badge { position: absolute; top: 6px; left: 6px; font-size: 11px; background: rgba(0,0,0,.6); color: #fff; padding: 2px 6px; border-radius: 4px; }
-  .empty { color: var(--muted); padding: 24px; text-align: center; }
-
-  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; align-items: center; justify-content: center; z-index: 40; padding: 20px; }
+  /* modal */
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: none; align-items: center; justify-content: center; z-index: 40; padding: 20px; }
   .modal.on { display: flex; }
-  .modal .box { background: var(--surface); border-radius: 10px; padding: 14px; max-width: 1200px; width: 100%; max-height: 95vh; overflow: auto; }
+  .modal .box { background: var(--surface); border-radius: 12px; padding: 14px; max-width: 1200px; width: 100%; max-height: 95vh; overflow: auto; }
   .modal .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .modal .pair.single { grid-template-columns: 1fr; }
-  .modal .pair img, .modal .pair video { width: 100%; max-height: 72vh; object-fit: contain; background: var(--page); border-radius: 6px; }
+  .modal .pair img, .modal .pair video { width: 100%; max-height: 72vh; object-fit: contain; background: var(--page); border-radius: 8px; }
   .modal .cap { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
   .modal .close { float: right; }
+
+  @media (max-width: 1000px) { .create { grid-template-columns: 1fr; } .controls { position: static; max-height: none; } }
+  @media (max-width: 720px) {
+    .app { grid-template-columns: 1fr; }
+    .side { position: fixed; bottom: 0; left: 0; right: 0; top: auto; height: auto; flex-direction: row; justify-content: space-around; padding: 6px; border-right: none; border-top: 1px solid var(--border); z-index: 20; }
+    .brand, .side .foot { display: none; }
+    .nav { flex-direction: column; gap: 2px; font-size: 11px; padding: 6px 10px; width: auto; }
+    .view { padding: 12px 12px 90px; }
+    .topbar { padding: 10px 12px; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <div><h1>Generate dashboard</h1><div class="sub" id="dir"></div></div>
-    <div class="sub" id="updated"></div>
-  </header>
+<div class="app">
+  <aside class="side">
+    <div class="brand">Generate</div>
+    <button class="nav on" data-view="create"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg>Create</button>
+    <button class="nav" data-view="library"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Library</button>
+    <button class="nav" data-view="spend"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 16V9M11 16V5M16 16v-6"/></svg>Spend</button>
+    <div class="foot" id="dir"></div>
+  </aside>
 
-  <div id="banner" class="card banner hidden"></div>
-  <section class="grid tiles" id="tiles"></section>
-
-  <section class="grid two">
-    <div class="card chart-wrap">
-      <div class="chart-head"><h2>Spend this month, per day</h2><button class="linkbtn" id="tableToggle">Table view</button></div>
-      <div id="chart"></div><div id="chartTable" class="hidden"></div><div class="tip" id="tip"></div>
-    </div>
-    <div class="card"><h2>Jobs</h2><div class="jobs" id="jobs"><div class="empty">Nothing running.</div></div></div>
-  </section>
-
-  <section class="card" id="create" style="margin-bottom:12px">
-    <div class="create-head">
-      <div class="seg"><button type="button" id="kindImage" class="on">Image</button><button type="button" id="kindVideo">Video</button></div>
-      <select id="preset"><option value="">No preset</option></select>
-      <span class="sub" id="createHint"></span>
-    </div>
-    <form id="form" autocomplete="off">
-      <div class="source hidden" id="source"></div>
-      <textarea id="prompt" class="final big" placeholder="Describe the shot. Example: a Roman senator waking up in a marble villa at dawn, first-person POV, warm light, no text"></textarea>
-      <div class="preset-frag" id="presetFrag"></div>
-      <div class="actions">
-        <button type="submit" class="primary" id="goBtn">Generate image</button>
-        <button type="button" class="ghost" id="quoteBtn">Quote</button>
-        <label class="check hidden" id="approveWrap"><input type="checkbox" id="approve"> I approve this paid run</label>
-        <button type="button" class="ghost" id="helperBtn">Prompt helper</button>
-        <button type="button" class="ghost" id="optionsBtn">Options</button>
-        <button type="button" class="linkbtn" id="clearBtn">clear</button>
-        <span class="sub" id="formMsg"></span>
+  <div class="main">
+    <div class="topbar">
+      <h1 id="viewTitle">Create</h1>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="pill" id="creditsPill">…</span>
+        <span class="sub" id="updated"></span>
       </div>
-      <div class="quote" id="quote"></div>
-
-      <div class="panel hidden" id="helperPanel">
-        <div id="imageBuilder">
-          <div class="row">
-            <div><label for="f_subject">Subject (who or what)</label><input type="text" id="f_subject" placeholder="a Roman senator waking up"></div>
-            <div><label for="f_setting">Setting</label><input type="text" id="f_setting" placeholder="marble villa bedroom at dawn"></div>
-          </div>
-          <div class="row three">
-            <div><label for="f_camera">Camera and lens</label><input type="text" id="f_camera" placeholder="35mm, eye level"></div>
-            <div><label for="f_light">Lighting</label><input type="text" id="f_light" placeholder="warm sunlight through columns"></div>
-            <div><label for="f_mood">Mood and style</label><input type="text" id="f_mood" placeholder="cinematic, photoreal"></div>
-          </div>
-          <div class="row one"><div><label for="f_details">Extra details</label><input type="text" id="f_details" placeholder="silk sheets, a toga folded on a chair"></div></div>
-        </div>
-        <div id="videoBuilder" class="hidden">
-          <div class="row">
-            <div><label for="m_camera">Camera move</label><input type="text" id="m_camera" placeholder="slow push-in"></div>
-            <div><label for="m_subject">Subject motion</label><input type="text" id="m_subject" placeholder="hands lift slightly, head turns to the window"></div>
-          </div>
-          <div class="row">
-            <div><label for="m_atmo">Atmosphere</label><input type="text" id="m_atmo" placeholder="curtains move, dust in the light"></div>
-            <div><label for="m_keep">Keep still</label><input type="text" id="m_keep" placeholder="keep the sign readable, face stays in frame"></div>
-          </div>
-        </div>
-        <div class="sub">The fields write into the text box above. <button type="button" class="linkbtn" id="rebuild">Rebuild the text from the fields</button></div>
-      </div>
-
-      <div class="panel hidden" id="optionsPanel">
-        <div class="row one"><div><label for="negative">Avoid (negative prompt)</label><input type="text" id="negative" placeholder="text, watermark, logo"></div></div>
-        <div id="imageOptions">
-          <div class="row three">
-            <div><label for="imgModel">Model</label><select id="imgModel"><option value="nano-banana-2">nano-banana-2</option><option value="gpt-image-2">gpt-image-2 (text)</option></select></div>
-            <div><label for="aspect">Aspect</label><select id="aspect"><option>9:16</option><option>16:9</option><option>1:1</option><option>4:5</option><option>auto</option></select></div>
-            <div><label for="resolution">Resolution</label><select id="resolution"><option>1K</option><option>2K</option><option>4K</option></select></div>
-          </div>
-          <div class="row">
-            <div><label>Variations</label><div class="seg" id="countSeg"><button type="button" data-n="1" class="on">1</button><button type="button" data-n="2">2</button><button type="button" data-n="3">3</button><button type="button" data-n="4">4</button></div></div>
-            <div><label for="imgName">File name (optional)</label><input type="text" id="imgName" placeholder="roman-senator"></div>
-          </div>
-          <h3>Reference images <span class="sub" id="refHint">(up to 3, nano-banana-2 only)</span></h3>
-          <div class="refs" id="refs"></div>
-          <input type="file" id="refFile" accept="image/*" multiple class="hidden">
-        </div>
-        <div id="videoOptions" class="hidden">
-          <div class="row one"><div><label for="still">Source still (URL or a file name from the board)</label><input type="text" id="still" placeholder="https://..."></div></div>
-          <div class="row three">
-            <div><label for="vidModel">Model</label><select id="vidModel"><option value="pro">pro (default)</option><option value="lite">lite (budget)</option><option value="2.5">2.5</option></select></div>
-            <div><label for="duration">Duration (s)</label><input type="number" id="duration" value="10" min="2" max="15" step="1"></div>
-            <div><label for="seed">Seed (-1 random)</label><input type="number" id="seed" value="-1" step="1"></div>
-          </div>
-          <div class="row">
-            <div><label for="vidName">File name (optional)</label><input type="text" id="vidName"></div>
-            <div style="padding-top:18px"><label class="check"><input type="checkbox" id="cameraFixed"> Camera fixed</label></div>
-          </div>
-        </div>
-        <label class="check"><input type="checkbox" id="overrideCap"> Override spend cap for this run</label>
-      </div>
-    </form>
-  </section>
-
-  <section>
-    <div class="toolbar">
-      <h2 style="margin:0 8px 0 0">Review board</h2>
-      <div class="seg" id="kindFilter"><button type="button" data-f="all" class="on">All</button><button type="button" data-f="image">Images</button><button type="button" data-f="video">Videos</button></div>
-      <button type="button" class="ghost small" id="starFilter">★ Starred only</button>
-      <button type="button" class="ghost small" id="showRejected">Show rejected</button>
-      <input type="search" id="search" placeholder="Search prompts and notes">
-      <button type="button" class="ghost small hidden" id="compareBtn">Compare 2 selected</button>
-      <span class="sub" id="boardCount"></span>
     </div>
-    <div class="board" id="board"></div>
-  </section>
-</main>
 
-<div class="modal" id="modal"><div class="box"><button class="ghost small close" id="modalClose">Close</button><div id="modalBody"></div></div></div>
+    <div class="view" id="view-create">
+      <div id="banner" class="banner hidden"></div>
+      <div class="create">
+        <form class="controls" id="form" autocomplete="off">
+          <div class="seg mode full"><button type="button" id="kindImage" class="on">Image</button><button type="button" id="kindVideo">Video</button></div>
+
+          <h3>Model</h3>
+          <select id="imgModel"><option value="nano-banana-2">Nano Banana 2 · fast, references</option><option value="gpt-image-2">GPT Image 2 · readable text</option></select>
+          <select id="vidModel" class="hidden"><option value="pro">Seedance 1.0 Pro · 14 cr/s</option><option value="lite">Seedance 1.0 Lite · 10 cr/s</option><option value="2.5">Seedance 2.5 · newest</option></select>
+
+          <div id="imageOptions">
+            <h3>References <span class="muted" id="refHint"></span></h3>
+            <div class="refs" id="refs"></div>
+            <input type="file" id="refFile" accept="image/*" multiple class="hidden">
+          </div>
+          <div id="videoOptions" class="hidden">
+            <h3>Source still</h3>
+            <div class="drop" id="source"></div>
+            <input type="text" id="still" placeholder="…or paste an image URL" style="margin-top:8px">
+          </div>
+
+          <h3>Prompt</h3>
+          <select id="preset" style="margin-bottom:8px"><option value="">No preset</option></select>
+          <textarea id="prompt" class="prompt"></textarea>
+          <div class="muted" id="presetFrag" style="margin-top:4px"></div>
+
+          <div id="imageSettings">
+            <h3>Aspect ratio</h3>
+            <div class="chips" id="aspectChips"></div>
+            <h3>Resolution</h3>
+            <div class="chips" id="resChips"></div>
+            <h3>Variations</h3>
+            <div class="chips" id="countChips"></div>
+          </div>
+          <div id="videoSettings" class="hidden">
+            <h3>Duration</h3>
+            <div class="chips" id="durChips"></div>
+            <div class="row" style="margin-top:10px">
+              <div><label for="seed">Seed (-1 random)</label><input type="number" id="seed" value="-1" step="1"></div>
+              <div style="padding-top:20px"><label class="check"><input type="checkbox" id="cameraFixed"> Camera fixed</label></div>
+            </div>
+          </div>
+
+          <details id="helper"><summary>Prompt helper</summary><div class="inner">
+            <div id="imageBuilder">
+              <div class="row"><div><label for="f_subject">Subject</label><input type="text" id="f_subject" placeholder="a Roman senator waking up"></div><div><label for="f_setting">Setting</label><input type="text" id="f_setting" placeholder="marble villa bedroom at dawn"></div></div>
+              <div class="row"><div><label for="f_camera">Camera and lens</label><input type="text" id="f_camera" placeholder="35mm, eye level"></div><div><label for="f_light">Lighting</label><input type="text" id="f_light" placeholder="warm sunlight"></div></div>
+              <div class="row"><div><label for="f_mood">Mood and style</label><input type="text" id="f_mood" placeholder="cinematic, photoreal"></div><div><label for="f_details">Details</label><input type="text" id="f_details" placeholder="silk sheets, a toga on a chair"></div></div>
+            </div>
+            <div id="videoBuilder" class="hidden">
+              <div class="row"><div><label for="m_camera">Camera move</label><input type="text" id="m_camera" placeholder="slow push-in"></div><div><label for="m_subject">Subject motion</label><input type="text" id="m_subject" placeholder="head turns to the window"></div></div>
+              <div class="row"><div><label for="m_atmo">Atmosphere</label><input type="text" id="m_atmo" placeholder="curtains move, dust in the light"></div><div><label for="m_keep">Keep still</label><input type="text" id="m_keep" placeholder="face stays in frame"></div></div>
+            </div>
+            <div class="muted">Fields write into the prompt. <button type="button" class="linkbtn" id="rebuild">Rebuild from fields</button></div>
+          </div></details>
+
+          <details id="advanced"><summary>Advanced</summary><div class="inner">
+            <div class="row one"><div><label for="negative">Avoid (negative prompt)</label><input type="text" id="negative" placeholder="text, watermark, logo"></div></div>
+            <div class="row"><div><label for="imgName">File name</label><input type="text" id="imgName" placeholder="optional"></div><div><label for="vidName">Clip name</label><input type="text" id="vidName" placeholder="optional"></div></div>
+            <label class="check"><input type="checkbox" id="overrideCap"> Override spend cap for this run</label>
+          </div></details>
+
+          <div class="footer">
+            <div class="cost"><span id="costLabel">Estimated cost</span><b id="cost">–</b></div>
+            <label class="check hidden" id="approveWrap" style="margin-bottom:8px"><input type="checkbox" id="approve"> I approve this paid run</label>
+            <button type="submit" class="primary" id="goBtn">Generate</button>
+            <div class="msg" id="formMsg"></div>
+            <div style="margin-top:6px"><button type="button" class="linkbtn" id="clearBtn">Clear form</button></div>
+          </div>
+        </form>
+
+        <div class="feed" id="feed"></div>
+      </div>
+    </div>
+
+    <div class="view hidden" id="view-library">
+      <div class="toolbar">
+        <div class="seg" id="kindFilter"><button type="button" data-f="all" class="on">All</button><button type="button" data-f="image">Images</button><button type="button" data-f="video">Videos</button></div>
+        <button type="button" class="ghost" id="starFilter">★ Starred</button>
+        <button type="button" class="ghost" id="showRejected">Show rejected</button>
+        <input type="search" id="search" placeholder="Search prompts and notes">
+        <button type="button" class="ghost hidden" id="compareBtn">Compare 2 selected</button>
+        <span class="sub" id="boardCount"></span>
+      </div>
+      <div class="board" id="board"></div>
+    </div>
+
+    <div class="view hidden" id="view-spend">
+      <div class="tiles" id="tiles"></div>
+      <div class="card chart-wrap">
+        <div class="chart-head"><h2>Spend this month, per day</h2><button class="linkbtn" id="tableToggle">Table view</button></div>
+        <div id="chart"></div><div id="chartTable" class="hidden"></div><div class="tip" id="tip"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="modal"><div class="box"><button class="ghost close" id="modalClose">Close</button><div id="modalBody"></div></div></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -279,10 +304,11 @@
   const $ = (id) => document.getElementById(id);
   const fmtUsd = (v) => "$" + (Number(v) || 0).toFixed(2);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-  let state = null, presets = {}, kind = "image", count = 1, manualPrompt = false, tableOpen = false;
+  let state = null, presets = {}, kind = "image", manualPrompt = false, tableOpen = false;
+  const settings = {aspect: "9:16", resolution: "1K", count: 1, duration: 10};
   let filter = {kind: "all", starred: false, rejected: false, q: ""};
   const jobs = new Map(), polling = new Set(), refSel = [], cmpSel = [];
-  let source = null, parentId = null;   // video source item; follow-up parent
+  let source = null, parentId = null;
 
   async function api(path, body) {
     const r = await fetch(path, body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {cache: "no-store"});
@@ -291,6 +317,16 @@
   function toast(msg, ms = 2600) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms); }
   const refOf = (g) => state && state.mode === "local" && g.path ? g.path : g.url;
 
+  // ---------- navigation ----------
+  function showView(name) {
+    document.querySelectorAll(".nav").forEach(b => b.classList.toggle("on", b.dataset.view === name));
+    ["create", "library", "spend"].forEach(v => $("view-" + v).classList.toggle("hidden", v !== name));
+    $("viewTitle").textContent = {create: "Create", library: "Library", spend: "Spend"}[name];
+    if (name === "spend" && state) renderChart(state.daily, state.spend);
+    try { localStorage.setItem("view", name); } catch {}
+  }
+  document.querySelectorAll(".nav").forEach(b => b.onclick = () => showView(b.dataset.view));
+
   // ---------- state loop ----------
   async function load() {
     try {
@@ -298,7 +334,7 @@
       if (!state.ok) throw new Error(state.error || "state failed");
       (state.jobs || []).forEach(j => jobs.set(j.id, {...(jobs.get(j.id) || {}), ...j}));
       render();
-    } catch (e) { $("updated").textContent = "Dashboard API not reachable: " + e.message; }
+    } catch (e) { $("updated").textContent = "API not reachable: " + e.message; }
     jobs.forEach(j => { if (j.status === "running") pollJob(j.id); });
     setTimeout(load, 20000);
   }
@@ -307,26 +343,33 @@
     polling.add(id);
     try {
       const r = await api("/api/tasks?id=" + encodeURIComponent(id));
-      if (r.ok && r.job) { jobs.set(id, r.job); renderJobs(); if (r.job.status !== "running") { setTimeout(load, 800); return; } }
-      else if (r.gone) { jobs.delete(id); renderJobs(); setTimeout(load, 800); return; }
+      if (r.ok && r.job) { jobs.set(id, r.job); renderFeed(); if (r.job.status !== "running") { setTimeout(load, 800); return; } }
+      else if (r.gone) { jobs.delete(id); renderFeed(); setTimeout(load, 800); return; }
     } catch {} finally { polling.delete(id); }
     const j = jobs.get(id);
     if (j && j.status === "running") setTimeout(() => pollJob(id), state && state.mode === "vercel" ? 12000 : 4000);
   }
   function render() {
     const s = state;
-    $("dir").textContent = s.mode === "vercel" ? "Outputs stored in Vercel Blob" : s.generations_dir;
-    $("updated").textContent = "Updated " + new Date(s.now).toLocaleTimeString();
-    renderBanner(s); renderTiles(s); renderChart(s.daily, s.spend); renderJobs(); renderRefs(); renderBoard();
+    $("dir").textContent = s.mode === "vercel" ? "Stored in Vercel Blob" : "Folder: " + String(s.generations_dir || "").split(/[\\/]/).filter(Boolean).pop();
+    $("dir").title = s.generations_dir || "";
+    $("updated").textContent = new Date(s.now).toLocaleTimeString();
+    renderBanner(s); renderCredits(s); renderTiles(s); if (!$("view-spend").classList.contains("hidden")) renderChart(s.daily, s.spend);
+    renderRefs(); renderFeed(); renderBoard(); estimate();
   }
   function renderBanner(s) {
     const b = $("banner");
     if (s.key_present && !s.setup_error) { b.classList.add("hidden"); return; }
     b.classList.remove("hidden");
     b.innerHTML = !s.key_present
-      ? (s.mode === "vercel" ? `<b>No API key.</b> Add <code>KIE_API_KEY</code> in the Vercel project's Environment Variables, then redeploy.`
-                             : `<b>No API key.</b> Copy <code>.env.example</code> to <code>.env</code>, paste your kie.ai key, restart the dashboard.`)
+      ? (s.mode === "vercel" ? `<b>No API key.</b> Add <code>KIE_API_KEY</code> in the Vercel project's Environment Variables, then redeploy.` : `<b>No API key.</b> Copy <code>.env.example</code> to <code>.env</code>, paste your kie.ai key, restart the dashboard.`)
       : `<b>Setup problem.</b> ${esc(s.setup_error)}`;
+  }
+  function renderCredits(s) {
+    const c = s.credits || {};
+    $("creditsPill").innerHTML = c.value != null
+      ? `<b>${Number(c.value).toLocaleString()} credits</b> <span class="muted">≈ ${fmtUsd(c.usd)}</span> <a href="https://kie.ai/billing" target="_blank" rel="noopener">Top up</a>`
+      : `<span class="muted">${esc(c.error || "checking credits…")}</span>`;
   }
   function meter(used, cap) {
     const pct = cap > 0 ? Math.min(100, used / cap * 100) : 0, r = cap > 0 ? used / cap : 0;
@@ -335,11 +378,9 @@
   }
   function renderTiles(s) {
     const c = s.credits || {}, sp = s.spend;
-    const creditVal = c.value != null ? Number(c.value).toLocaleString() : "–";
-    const creditNote = c.value != null ? `about ${fmtUsd(c.usd)} remaining on kie.ai` : (c.error || "checking…");
     const starred = s.generations.filter(g => g.rating === "star").length;
     $("tiles").innerHTML = `
-      <div class="card tile hero"><div class="label">Credits remaining</div><div class="value">${creditVal}</div><div class="note">${esc(creditNote)} <button class="linkbtn" id="refreshCredits">refresh</button></div></div>
+      <div class="card tile hero"><div class="label">Credits remaining</div><div class="value">${c.value != null ? Number(c.value).toLocaleString() : "–"}</div><div class="note">${c.value != null ? "about " + fmtUsd(c.usd) + " on kie.ai" : esc(c.error || "")} <button class="linkbtn" id="refreshCredits">refresh</button></div></div>
       <div class="card tile"><div class="label">Spent today</div><div class="value">${fmtUsd(sp.today_usd)}</div>${meter(sp.today_usd, sp.session_cap_usd)}</div>
       <div class="card tile"><div class="label">Spent this month</div><div class="value">${fmtUsd(sp.month_usd)}</div>${meter(sp.month_usd, sp.monthly_cap_usd)}</div>
       <div class="card tile"><div class="label">Outputs</div><div class="value">${s.generations.length}</div><div class="note">${starred} starred · ${sp.month_runs} runs this month</div></div>`;
@@ -349,7 +390,7 @@
   // ---------- chart ----------
   function niceMax(v) { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p; return 10 * p; }
   function renderChart(daily, spend) {
-    const host = $("chart"); const W = host.clientWidth || 600, H = 200, padL = 44, padR = 12, padT = 18, padB = 26;
+    const host = $("chart"); const W = host.clientWidth || 600, H = 220, padL = 44, padR = 12, padT = 18, padB = 26;
     const maxV = niceMax(Math.max(0, ...daily.map(d => d.usd)));
     const n = daily.length, band = (W - padL - padR) / n, bw = Math.min(24, band * 0.6);
     const y = v => padT + (H - padT - padB) * (1 - v / maxV), base = H - padB;
@@ -373,22 +414,35 @@
     $("chartTable").innerHTML = `<table><thead><tr><th>Day</th><th class="num">Runs</th><th class="num">USD</th></tr></thead><tbody>` + daily.map(d => `<tr><td>${d.date}</td><td class="num">${d.runs}</td><td class="num">${fmtUsd(d.usd)}</td></tr>`).join("") + `<tr><td><b>Month</b></td><td class="num"><b>${spend.month_runs}</b></td><td class="num"><b>${fmtUsd(spend.month_usd)}</b></td></tr></tbody></table>`;
   }
   $("tableToggle").onclick = () => { tableOpen = !tableOpen; $("chart").classList.toggle("hidden", tableOpen); $("chartTable").classList.toggle("hidden", !tableOpen); $("tableToggle").textContent = tableOpen ? "Chart view" : "Table view"; };
-  window.addEventListener("resize", () => state && renderChart(state.daily, state.spend));
+  window.addEventListener("resize", () => state && !$("view-spend").classList.contains("hidden") && renderChart(state.daily, state.spend));
 
-  // ---------- jobs ----------
-  function renderJobs() {
-    const host = $("jobs");
-    const list = [...jobs.values()].sort((a, b) => b.started_at - a.started_at).slice(0, 40);
-    if (!list.length) { host.innerHTML = `<div class="empty">Nothing running.</div>`; return; }
-    host.innerHTML = list.map(j => {
-      const r = j.result || {}; let msg = "";
-      if (j.status === "running") msg = `${j.kie_state || "running"} · ${Math.round((Date.now() / 1000) - j.started_at)}s`;
-      else if (j.status === "done") msg = `${esc(r.file || r.url)} · ${r.credits_consumed ?? "?"} credits · ${fmtUsd(r.usd)}` + (r.media && r.media.width ? ` · ${r.media.width}x${r.media.height}${r.media.duration_s ? " · " + r.media.duration_s + "s" : ""}` : "");
-      else if (j.status === "approval_required") msg = `Needs approval: ${fmtUsd(r.usd_est)} for ${r.duration_s}s on ${r.model}. Tick "I approve this paid run" and generate again.`;
-      else msg = esc(r.error || j.message || "failed");
-      const v = j.variant ? ` v${j.variant}` : "";
-      return `<div class="job"><span class="pill ${j.status}">${j.status.replace("_", " ")}</span><div><div>${esc(j.kind)}${v} · ${esc(j.model || "default")} · ${esc((j.prompt || "").slice(0, 80))}${(j.prompt || "").length > 80 ? "…" : ""}</div><div class="msg">${msg}</div></div><span class="sub">${new Date(j.started_at * 1000).toLocaleTimeString()}</span></div>`;
-    }).join("");
+  // ---------- chips ----------
+  function chips(id, values, key, labels) {
+    $(id).innerHTML = values.map(v => `<button type="button" class="chip ${settings[key] == v ? "on" : ""}" data-v="${v}">${labels ? labels[v] : v}</button>`).join("");
+    $(id).querySelectorAll(".chip").forEach(b => b.onclick = () => { settings[key] = isNaN(+b.dataset.v) ? b.dataset.v : +b.dataset.v; chips(id, values, key, labels); estimate(); });
+  }
+  function renderChips() {
+    chips("aspectChips", ["9:16", "16:9", "1:1", "4:5", "auto"], "aspect", {"9:16": "9:16 vertical", "16:9": "16:9", "1:1": "1:1", "4:5": "4:5", "auto": "auto"});
+    chips("resChips", ["1K", "2K", "4K"], "resolution");
+    chips("countChips", [1, 2, 3, 4], "count", {1: "1", 2: "2", 3: "3", 4: "4"});
+    const durs = $("vidModel").value === "2.5" ? [4, 5, 6, 8, 10, 12] : [5, 10];
+    if (!durs.includes(settings.duration)) settings.duration = durs.includes(10) ? 10 : durs[0];
+    chips("durChips", durs, "duration", Object.fromEntries(durs.map(d => [d, d + " s"])));
+  }
+  $("vidModel").onchange = () => { renderChips(); estimate(); };
+  $("imgModel").onchange = () => { renderRefs(); estimate(); };
+
+  // ---------- cost estimate (client side, same table as the server) ----------
+  function estimate() {
+    if (!state) return;
+    const pr = state.pricing || {}, per = state.usd_per_credit || 0.005;
+    let credits = 0, label = "";
+    if (kind === "image") { const m = pr.image && pr.image[$("imgModel").value]; credits = m ? (m.credits[settings.resolution] || 0) * settings.count : 0; label = `${settings.count} still${settings.count > 1 ? "s" : ""} · ${settings.resolution}`; }
+    else { const m = pr.video && pr.video[$("vidModel").value]; credits = m ? m.credits_per_second * settings.duration : 0; label = `${settings.duration} s · 1080p`; }
+    const usd = credits * per, left = state.spend ? Math.min(state.spend.remaining_today_usd, state.spend.remaining_month_usd) : null;
+    $("costLabel").textContent = label + (left != null ? ` · ${fmtUsd(left)} left under cap` : "");
+    $("cost").textContent = `${fmtUsd(usd)} · ${credits} cr`;
+    $("goBtn").textContent = kind === "image" ? (settings.count > 1 ? `Generate ${settings.count} variations` : "Generate image") : "Generate video";
   }
 
   // ---------- presets and builder ----------
@@ -401,23 +455,22 @@
     const p = preset();
     $("presetFrag").textContent = p ? "Preset adds: " + (kind === "image" ? p.still : p.motion) : "";
     if (!p) { compose(); return; }
-    if (p.aspect) $("aspect").value = p.aspect;
+    if (p.aspect) settings.aspect = p.aspect;
     if (p.image_model) $("imgModel").value = p.image_model;
     if (p.video_model) $("vidModel").value = p.video_model;
-    if (p.duration) $("duration").value = p.duration;
+    if (p.duration) settings.duration = p.duration;
     $("cameraFixed").checked = !!p.camera_fixed;
     if (p.negative && !$("negative").value) $("negative").value = p.negative;
-    manualPrompt = false; compose();
+    renderChips(); manualPrompt = false; compose(); estimate();
   }
   $("preset").onchange = applyPreset;
   const join = (parts) => parts.map(s => (s || "").trim()).filter(Boolean).join(", ");
   function compose(force) {
     if (manualPrompt && !force) return;
     const p = preset();
-    let text;
-    if (kind === "image") text = join([$("f_subject").value, $("f_setting").value, p && p.still, $("f_camera").value, $("f_light").value, $("f_mood").value, $("f_details").value]);
-    else text = join([$("m_camera").value, $("m_subject").value, $("m_atmo").value, p && p.motion, $("m_keep").value ? "keep: " + $("m_keep").value : ""]);
-    $("prompt").value = text;
+    $("prompt").value = kind === "image"
+      ? join([$("f_subject").value, $("f_setting").value, p && p.still, $("f_camera").value, $("f_light").value, $("f_mood").value, $("f_details").value])
+      : join([$("m_camera").value, $("m_subject").value, $("m_atmo").value, p && p.motion, $("m_keep").value ? "keep: " + $("m_keep").value : ""]);
   }
   ["f_subject", "f_setting", "f_camera", "f_light", "f_mood", "f_details", "m_camera", "m_subject", "m_atmo", "m_keep"].forEach(id => $(id).addEventListener("input", () => compose()));
   $("prompt").addEventListener("input", () => { manualPrompt = true; });
@@ -434,39 +487,32 @@
   function setKind(k) {
     kind = k;
     $("kindImage").classList.toggle("on", k === "image"); $("kindVideo").classList.toggle("on", k === "video");
-    ["imageBuilder", "imageOptions"].forEach(id => $(id).classList.toggle("hidden", k !== "image"));
-    ["videoBuilder", "videoOptions", "approveWrap"].forEach(id => $(id).classList.toggle("hidden", k !== "video"));
-    $("goBtn").textContent = k === "image" ? (count > 1 ? `Generate ${count} variations` : "Generate image") : "Generate video";
-    $("createHint").textContent = k === "image" ? "Stills cost about 4 cents each." : "One paid run per approval. The clip takes the still's size.";
+    ["imgModel", "imageOptions", "imageSettings", "imageBuilder"].forEach(id => $(id).classList.toggle("hidden", k !== "image"));
+    ["vidModel", "videoOptions", "videoSettings", "videoBuilder", "approveWrap"].forEach(id => $(id).classList.toggle("hidden", k !== "video"));
     $("prompt").placeholder = k === "image"
       ? "Describe the shot. Example: a Roman senator waking up in a marble villa at dawn, first-person POV, warm light, no text"
       : "Describe the motion. Example: slow push-in, curtains move in the breeze, keep the face in frame";
-    $("quote").textContent = ""; manualPrompt = false; applyPreset(); renderSource(); updateGo();
+    manualPrompt = false; applyPreset(); renderSource(); updateGo(); estimate();
   }
-  function togglePanel(id, btn) { const open = $(id).classList.toggle("hidden") === false; $(btn).classList.toggle("open", open); return open; }
-  $("helperBtn").onclick = () => togglePanel("helperPanel", "helperBtn");
-  $("optionsBtn").onclick = () => togglePanel("optionsPanel", "optionsBtn");
-  function openPanel(id, btn) { $(id).classList.remove("hidden"); $(btn).classList.add("open"); }
   function updateGo() { $("goBtn").disabled = kind === "video" && !$("approve").checked; }
   $("kindImage").onclick = () => setKind("image"); $("kindVideo").onclick = () => setKind("video");
   $("approve").onchange = updateGo;
-  $("countSeg").querySelectorAll("button").forEach(b => b.onclick = () => { count = +b.dataset.n; $("countSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); $("goBtn").textContent = count > 1 ? `Generate ${count} variations` : "Generate image"; $("quote").textContent = ""; });
-  $("clearBtn").onclick = () => { $("form").reset(); refSel.length = 0; source = null; parentId = null; count = 1; $("countSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x.dataset.n === "1")); manualPrompt = false; applyPreset(); renderSource(); renderRefs(); $("quote").textContent = ""; $("formMsg").textContent = ""; $("goBtn").textContent = kind === "image" ? "Generate image" : "Generate video"; updateGo(); };
+  $("clearBtn").onclick = () => { $("form").reset(); refSel.length = 0; source = null; parentId = null; settings.count = 1; manualPrompt = false; renderChips(); applyPreset(); renderSource(); renderRefs(); $("formMsg").textContent = ""; updateGo(); estimate(); };
 
   // ---------- references ----------
   function renderRefs() {
     const host = $("refs"); if (!state) return;
     const lib = [...(state.refs || [])];
     const known = new Set(lib.map(r => refOf(r)));
-    refSel.forEach(r => { if (!known.has(r.ref)) lib.unshift({name: r.name, url: r.url, path: r.path, _board: true}); });
+    refSel.forEach(r => { if (!known.has(r.ref)) lib.unshift({name: r.name, url: r.url, path: r.path}); });
     host.innerHTML = lib.map(r => { const ref = refOf(r), on = refSel.some(s => s.ref === ref); return `<div class="ref ${on ? "on" : ""}" data-ref="${esc(ref)}" data-url="${esc(r.url)}" data-name="${esc(r.name)}" data-path="${esc(r.path || "")}" title="${esc(r.name)}"><img src="${esc(r.url)}" loading="lazy" alt=""></div>`; }).join("") + `<div class="ref add" id="refAdd" title="Upload reference images">+</div>`;
     host.querySelectorAll(".ref:not(.add)").forEach(el => el.onclick = () => toggleRef({ref: el.dataset.ref, url: el.dataset.url, name: el.dataset.name, path: el.dataset.path || null}));
     $("refAdd").onclick = () => $("refFile").click();
-    $("refHint").textContent = `(${refSel.length}/3 selected, nano-banana-2 only)`;
+    $("refHint").textContent = $("imgModel").value === "nano-banana-2" ? `${refSel.length}/3 selected` : "not used by GPT Image 2";
   }
   function toggleRef(r) {
     const i = refSel.findIndex(s => s.ref === r.ref);
-    if (i >= 0) refSel.splice(i, 1); else { if (refSel.length >= 3) { toast("Up to 3 reference images."); return; } refSel.push(r); if ($("imgModel").value !== "nano-banana-2") { $("imgModel").value = "nano-banana-2"; toast("Switched to nano-banana-2, which accepts references."); } }
+    if (i >= 0) refSel.splice(i, 1); else { if (refSel.length >= 3) { toast("Up to 3 reference images."); return; } refSel.push(r); if ($("imgModel").value !== "nano-banana-2") { $("imgModel").value = "nano-banana-2"; toast("Switched to Nano Banana 2, which accepts references."); } }
     renderRefs();
   }
   $("refFile").onchange = async (ev) => {
@@ -498,51 +544,36 @@
   // ---------- video source ----------
   function renderSource() {
     const host = $("source");
-    if (kind !== "video" || !source) { host.classList.add("hidden"); host.innerHTML = ""; return; }
-    host.classList.remove("hidden");
-    host.innerHTML = `<img src="${esc(source.url)}" alt=""><div><div>Source still: ${esc(source.name)}</div><div class="muted">${esc((source.prompt || "").slice(0, 80))}</div></div><button type="button" class="ghost small x" id="sourceClear">change</button>`;
+    if (!source) { host.innerHTML = `<div class="grow muted">Pick an image in the feed and press <b>Animate</b>, or paste a URL below.</div>`; return; }
+    host.innerHTML = `<img src="${esc(source.url)}" alt=""><div class="grow"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(source.name)}</div><div class="muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(source.prompt || "")}</div></div><button type="button" class="ghost" id="sourceClear">change</button>`;
     $("still").value = refOf(source);
-    $("sourceClear").onclick = () => { source = null; $("still").value = ""; renderSource(); openPanel("optionsPanel", "optionsBtn"); $("still").focus(); };
+    $("sourceClear").onclick = () => { source = null; $("still").value = ""; renderSource(); $("still").focus(); };
   }
-  $("still").addEventListener("input", () => { source = null; renderSource(); });
+  $("still").addEventListener("input", () => { if (source) { source = null; renderSource(); } });
 
   // ---------- generate ----------
   function payload() {
     const base = {kind, prompt: $("prompt").value, negative: $("negative").value, fields: fields(), preset: $("preset").value || null, override_cap: $("overrideCap").checked, parent_id: parentId};
-    if (kind === "image") return {...base, model: $("imgModel").value, aspect: $("aspect").value, resolution: $("resolution").value, count, name: $("imgName").value || null, refs: refSel.map(r => r.ref)};
-    return {...base, image: $("still").value, model: $("vidModel").value, duration: $("duration").value, seed: $("seed").value, camera_fixed: $("cameraFixed").checked, name: $("vidName").value || null, approve: $("approve").checked};
+    if (kind === "image") return {...base, model: $("imgModel").value, aspect: settings.aspect, resolution: settings.resolution, count: settings.count, name: $("imgName").value || null, refs: refSel.map(r => r.ref)};
+    return {...base, image: $("still").value, model: $("vidModel").value, duration: settings.duration, seed: $("seed").value, camera_fixed: $("cameraFixed").checked, name: $("vidName").value || null, approve: $("approve").checked};
   }
-  $("quoteBtn").onclick = async () => {
-    const q = await api("/api/quote", payload());
-    if (!q.ok) { $("quote").textContent = q.error || "quote failed"; return; }
-    const extra = kind === "video" ? `${q.duration_s}s on ${q.model}` : `${q.resolution} on ${q.model}${q.count > 1 ? ` × ${q.count}` : ""}`;
-    const usd = q.usd_est_total ?? q.usd_est, cr = q.credits_est_total ?? q.credits_est;
-    $("quote").innerHTML = `Estimated <b>${fmtUsd(usd)}</b> (${cr} credits) for ${esc(extra)}. Remaining today ${fmtUsd(q.spend.remaining_today_usd)}, this month ${fmtUsd(q.spend.remaining_month_usd)}.${q.note ? " " + esc(q.note) : ""}`;
-  };
   async function submit(p) {
     const j = await api("/api/generate", p);
-    if (j.ok && j.jobs) { j.jobs.forEach(job => { jobs.set(job.id, job); pollJob(job.id); }); renderJobs(); return j.jobs; }
+    if (j.ok && j.jobs) { j.jobs.forEach(job => { jobs.set(job.id, job); pollJob(job.id); }); renderFeed(); return j.jobs; }
     throw new Error(j.error || "failed");
   }
   $("form").onsubmit = async (ev) => {
     ev.preventDefault();
     const p = payload();
-    if (!p.prompt.trim()) { $("formMsg").textContent = "Prompt is required."; return; }
-    if (kind === "video" && !p.image.trim()) { $("formMsg").textContent = "Pick a source still."; return; }
+    if (!p.prompt.trim()) { $("formMsg").textContent = "Write a prompt first."; return; }
+    if (kind === "video" && !p.image.trim()) { $("formMsg").textContent = "Pick a source still first."; return; }
     $("formMsg").textContent = "Submitting…"; $("goBtn").disabled = true;
-    try { const js = await submit(p); $("formMsg").textContent = js.length > 1 ? `${js.length} variations started.` : "Job started."; $("approve").checked = false; parentId = null; }
+    try { const js = await submit(p); $("formMsg").textContent = js.length > 1 ? `${js.length} variations started.` : "Started."; $("approve").checked = false; parentId = null; showView("create"); }
     catch (e) { $("formMsg").textContent = e.message; }
     updateGo();
   };
 
-  // ---------- review board ----------
-  function visible(g) {
-    if (filter.kind !== "all" && g.kind !== filter.kind) return false;
-    if (filter.starred && g.rating !== "star") return false;
-    if (!filter.rejected && (g.rating === "reject" || g.hidden)) return false;
-    if (filter.q) { const q = filter.q.toLowerCase(); if (!((g.prompt || "").toLowerCase().includes(q) || (g.note || "").toLowerCase().includes(q) || (g.name || "").toLowerCase().includes(q))) return false; }
-    return true;
-  }
+  // ---------- cards ----------
   function card(g) {
     const media = g.kind === "video" ? `<video src="${esc(g.url)}" controls preload="metadata" muted></video>` : `<img src="${esc(g.url)}" loading="lazy" alt="${esc(g.prompt || g.name)}">`;
     const dims = g.media && g.media.width ? `${g.media.width}x${g.media.height}${g.media.duration_s ? " · " + g.media.duration_s + "s" : ""}` : "";
@@ -562,61 +593,100 @@
         <div class="btns">
           <button class="ghost act star ${g.rating === "star" ? "on" : ""}" data-a="star" title="Star">★</button>
           <button class="ghost act rej ${g.rating === "reject" ? "on" : ""}" data-a="reject" title="Reject">✕</button>
-          <button class="ghost act" data-a="note" title="Note">Note</button>
+          <button class="ghost act" data-a="note">Note</button>
           <button class="ghost act ${cmpSel.includes(g.id) ? "on" : ""}" data-a="cmp" title="Select for compare">Cmp</button>
+          <a class="ghost" href="${esc(g.url)}" target="_blank" rel="noopener" download>↓</a>
         </div>
-        <div class="btns">${follow}${g.path ? `<button class="ghost act" data-a="copy">Path</button>` : ""}<a class="ghost" href="${esc(g.url)}" target="_blank" rel="noopener">Open</a></div>
+        <div class="btns">${follow}${g.path ? `<button class="ghost act" data-a="copy">Path</button>` : ""}</div>
       </div></div>`;
+  }
+  function attach(host) {
+    host.querySelectorAll(".act").forEach(el => el.onclick = (ev) => { ev.preventDefault(); const id = el.closest(".item").dataset.id; action(el.dataset.a, state.generations.find(g => g.id === id)); });
+  }
+  function groupsOf(items) {
+    const groups = new Map();
+    items.forEach(g => { const k = g.group || "_" + g.id; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(g); });
+    return groups;
+  }
+  function setHtml(k, gs, all) {
+    const picked = all.find(x => x.rating === "star");
+    return `<div class="gen"><div class="top"><span class="p">${esc(gs[0].prompt || "")}</span><span>${all.length} variations · ${picked ? "picked " + esc(picked.name) : "pick one"}</span></div><div class="items">${gs.map(g => card(g).replace('<div class="btns">', `<div class="btns"><button class="ghost act" data-a="pick">Pick</button>`)).join("")}</div></div>`;
+  }
+
+  // ---------- feed (create view) ----------
+  function renderFeed() {
+    const host = $("feed"); if (!state) return;
+    let html = "";
+    const running = [...jobs.values()].filter(j => j.status === "running").sort((a, b) => b.started_at - a.started_at);
+    const failed = [...jobs.values()].filter(j => j.status !== "running" && j.status !== "done" && Date.now() / 1000 - (j.finished_at || j.started_at) < 600);
+    if (running.length) {
+      const byGroup = new Map(); running.forEach(j => { const k = j.group || j.id; if (!byGroup.has(k)) byGroup.set(k, []); byGroup.get(k).push(j); });
+      byGroup.forEach(js => { html += `<div class="gen running"><div class="top"><span class="p">${esc(js[0].prompt || "")}</span><span>${esc(js[0].kind)} · ${esc(js[0].model || "default")}</span></div><div class="items">${js.map(j => `<div class="skel">${esc(j.kie_state || "running")} · ${Math.round(Date.now() / 1000 - j.started_at)}s</div>`).join("")}</div></div>`; });
+    }
+    failed.forEach(j => { const r = j.result || {}; const msg = j.status === "approval_required" ? `Needs approval: ${fmtUsd(r.usd_est)} for ${r.duration_s}s on ${r.model}. Tick "I approve this paid run" and generate again.` : (r.error || j.message || "failed"); html += `<div class="gen"><div class="top" style="border:none"><span class="p" style="color:var(--critical)">${esc(j.status.replace("_", " "))}: ${esc(j.prompt || "")}</span></div><div class="muted" style="padding:0 12px 12px">${esc(msg)}</div></div>`; });
+    const items = state.generations.filter(g => !(g.rating === "reject" || g.hidden)).slice(0, 24);
+    if (!items.length && !html) { host.innerHTML = `<div class="empty">Your generations will appear here. Write a prompt on the left and press Generate.</div>`; return; }
+    html += `<div class="feed-head"><span>Recent</span><button class="ghost" id="toLibrary">Open library</button></div>`;
+    groupsOf(items).forEach((gs, k) => {
+      const all = state.generations.filter(x => x.group === k);
+      if (!k.startsWith("_") && all.length > 1) html += setHtml(k, gs, all);
+      else html += `<div class="gen"><div class="items">${gs.map(card).join("")}</div></div>`;
+    });
+    host.innerHTML = html; attach(host);
+    const tl = $("toLibrary"); if (tl) tl.onclick = () => showView("library");
+  }
+
+  // ---------- library ----------
+  function visible(g) {
+    if (filter.kind !== "all" && g.kind !== filter.kind) return false;
+    if (filter.starred && g.rating !== "star") return false;
+    if (!filter.rejected && (g.rating === "reject" || g.hidden)) return false;
+    if (filter.q) { const q = filter.q.toLowerCase(); if (!((g.prompt || "").toLowerCase().includes(q) || (g.note || "").toLowerCase().includes(q) || (g.name || "").toLowerCase().includes(q))) return false; }
+    return true;
   }
   function renderBoard() {
     const host = $("board"); if (!state) return;
     const items = state.generations.filter(visible);
     $("boardCount").textContent = `${items.length} of ${state.generations.length}`;
-    if (!items.length) { host.innerHTML = `<div class="empty card">Nothing to show. Generate a still above or change the filters.</div>`; return; }
-    const groups = new Map(); items.forEach(g => { const k = g.group || "_" + g.id; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(g); });
+    if (!items.length) { host.innerHTML = `<div class="empty">Nothing to show. Generate something or change the filters.</div>`; return; }
     let html = "", loose = [];
     const flush = () => { if (loose.length) { html += `<div class="gallery">${loose.map(card).join("")}</div>`; loose = []; } };
-    groups.forEach((gs, k) => {
+    groupsOf(items).forEach((gs, k) => {
       const all = state.generations.filter(x => x.group === k);
       if (k.startsWith("_") || all.length < 2) { loose.push(...gs); return; }
-      flush();
-      const picked = all.find(x => x.rating === "star");
-      html += `<div class="set"><div class="set-head"><span>Variation set · ${all.length} stills · ${picked ? "picked: " + esc(picked.name) : "pick one to reject the rest"}</span><span>${esc((gs[0].prompt || "").slice(0, 70))}</span></div><div class="gallery">${gs.map(g => card(g).replace('<div class="btns">', `<div class="btns"><button class="ghost act" data-a="pick">Pick</button>`)).join("")}</div></div>`;
+      flush(); html += setHtml(k, gs, all);
     });
-    flush();
-    host.innerHTML = html;
-    host.querySelectorAll(".act").forEach(el => el.onclick = (ev) => { ev.preventDefault(); const id = el.closest(".item").dataset.id; action(el.dataset.a, state.generations.find(g => g.id === id)); });
+    flush(); host.innerHTML = html; attach(host);
   }
   async function setItem(g, patch) {
-    Object.assign(g, patch); renderBoard();
+    Object.assign(g, patch); renderFeed(); renderBoard();
     const r = await api("/api/item", {id: g.id, ...patch});
     if (!r.ok) toast("Could not save: " + (r.error || "unknown"), 4000);
   }
   async function action(a, g) {
     if (!g) return;
     const resOf = () => (g.params && g.params.resolution) || "1K";
+    const toCreate = () => { showView("create"); $("form").scrollIntoView({behavior: "smooth", block: "start"}); };
     switch (a) {
       case "view": openModal([g]); break;
       case "star": await setItem(g, {rating: g.rating === "star" ? null : "star", hidden: false}); break;
       case "reject": await setItem(g, {rating: g.rating === "reject" ? null : "reject", hidden: g.rating !== "reject"}); break;
       case "note": { const n = prompt("Note for this item", g.note || ""); if (n !== null) await setItem(g, {note: n}); break; }
-      case "cmp": { const i = cmpSel.indexOf(g.id); if (i >= 0) cmpSel.splice(i, 1); else { if (cmpSel.length >= 2) cmpSel.shift(); cmpSel.push(g.id); } $("compareBtn").classList.toggle("hidden", cmpSel.length !== 2); renderBoard(); break; }
-      case "pick": { const sibs = state.generations.filter(x => x.group === g.group && x.id !== g.id); await setItem(g, {rating: "star", hidden: false}); for (const s of sibs) if (s.rating !== "star") await setItem(s, {rating: "reject", hidden: true}); toast("Picked. Siblings rejected."); break; }
+      case "cmp": { const i = cmpSel.indexOf(g.id); if (i >= 0) cmpSel.splice(i, 1); else { if (cmpSel.length >= 2) cmpSel.shift(); cmpSel.push(g.id); } $("compareBtn").classList.toggle("hidden", cmpSel.length !== 2); renderFeed(); renderBoard(); if (cmpSel.length === 2) toast("Two selected. Compare is in the Library toolbar.", 2000); break; }
+      case "pick": { const sibs = state.generations.filter(x => x.group === g.group && x.id !== g.id); await setItem(g, {rating: "star", hidden: false}); for (const s of sibs) if (s.rating !== "star") await setItem(s, {rating: "reject", hidden: true}); toast("Picked. The others are rejected."); break; }
       case "copy": try { await navigator.clipboard.writeText(g.path); toast("Path copied"); } catch { prompt("Path", g.path); } break;
-      case "animate": setKind("video"); source = g; parentId = g.id; renderSource(); $("create").scrollIntoView({behavior: "smooth"}); $("prompt").focus(); break;
-      case "tweak": setKind("image"); $("preset").value = g.preset || ""; applyPreset(); setFields(g.fields); if (!g.fields || !g.fields.subject) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else { compose(true); openPanel("helperPanel", "helperBtn"); } $("negative").value = g.negative || ""; if (g.params) { if (g.params.aspect_ratio) $("aspect").value = g.params.aspect_ratio; if (g.params.resolution) $("resolution").value = g.params.resolution; } if (g.model) $("imgModel").value = g.model; refSel.length = 0; (g.refs || []).forEach(r => refSel.push({ref: r, url: r, name: r.split("/").pop()})); if (refSel.length) openPanel("optionsPanel", "optionsBtn"); parentId = g.id; renderRefs(); $("create").scrollIntoView({behavior: "smooth"}); toast("Loaded. Edit the text and generate."); break;
-      case "ref": toggleRef({ref: refOf(g), url: g.url, name: g.name, path: g.path || null}); setKind("image"); openPanel("optionsPanel", "optionsBtn"); toast("Added as a reference image."); break;
+      case "animate": setKind("video"); source = g; parentId = g.id; renderSource(); toCreate(); $("prompt").focus(); break;
+      case "tweak": setKind("image"); $("preset").value = g.preset || ""; applyPreset(); setFields(g.fields); if (!g.fields || !g.fields.subject) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else { compose(true); $("helper").open = true; } $("negative").value = g.negative || ""; if (g.params) { if (g.params.aspect_ratio) settings.aspect = g.params.aspect_ratio; if (g.params.resolution) settings.resolution = g.params.resolution; } if (g.model) $("imgModel").value = g.model; refSel.length = 0; (g.refs || []).forEach(r => refSel.push({ref: r, url: r, name: r.split("/").pop()})); parentId = g.id; renderChips(); renderRefs(); estimate(); toCreate(); toast("Loaded. Edit and generate."); break;
+      case "ref": toggleRef({ref: refOf(g), url: g.url, name: g.name, path: g.path || null}); setKind("image"); toCreate(); toast("Added as a reference."); break;
       case "reframe169": case "reframe11": {
-        const aspect = a === "reframe169" ? "16:9" : "1:1";
-        toast(`Generating ${aspect} version…`);
-        try { await submit({kind: "image", prompt: g.prompt, negative: g.negative || "", fields: g.fields || null, model: "nano-banana-2", aspect, resolution: resOf(), count: 1, name: (g.name || "").replace(/\.[^.]+$/, "") + "-" + aspect.replace(":", "x"), refs: [refOf(g)], parent_id: g.id, preset: g.preset || null}); } catch (e) { toast(e.message, 4000); }
+        const aspect = a === "reframe169" ? "16:9" : "1:1"; toast(`Generating ${aspect} version…`);
+        try { await submit({kind: "image", prompt: g.prompt, negative: g.negative || "", fields: g.fields || null, model: "nano-banana-2", aspect, resolution: resOf(), count: 1, name: (g.name || "").replace(/\.[^.]+$/, "") + "-" + aspect.replace(":", "x"), refs: [refOf(g)], parent_id: g.id, preset: g.preset || null}); showView("create"); } catch (e) { toast(e.message, 4000); }
         break; }
       case "hires": {
-        const next = resOf() === "1K" ? "2K" : "4K";
-        toast(`Generating ${next} version…`);
-        try { await submit({kind: "image", prompt: g.prompt, negative: g.negative || "", fields: g.fields || null, model: g.model === "gpt-image-2" ? "gpt-image-2" : "nano-banana-2", aspect: (g.params && g.params.aspect_ratio) || "9:16", resolution: next, count: 1, name: (g.name || "").replace(/\.[^.]+$/, "") + "-" + next, refs: g.model === "gpt-image-2" ? [] : [refOf(g)], parent_id: g.id, preset: g.preset || null}); } catch (e) { toast(e.message, 4000); }
+        const next = resOf() === "1K" ? "2K" : "4K"; toast(`Generating ${next} version…`);
+        try { await submit({kind: "image", prompt: g.prompt, negative: g.negative || "", fields: g.fields || null, model: g.model === "gpt-image-2" ? "gpt-image-2" : "nano-banana-2", aspect: (g.params && g.params.aspect_ratio) || "9:16", resolution: next, count: 1, name: (g.name || "").replace(/\.[^.]+$/, "") + "-" + next, refs: g.model === "gpt-image-2" ? [] : [refOf(g)], parent_id: g.id, preset: g.preset || null}); showView("create"); } catch (e) { toast(e.message, 4000); }
         break; }
-      case "redo": setKind("video"); source = state.generations.find(x => refOf(x) === g.input_image || x.url === g.input_image || x.path === g.input_image) || {name: "previous still", url: g.input_image, prompt: ""}; $("still").value = g.input_image || ""; if (source.url) renderSource(); setFields(g.fields); if (!g.fields) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true); $("negative").value = g.negative || ""; $("vidModel").value = g.model || "pro"; $("duration").value = (g.params && g.params.duration_s) || 10; $("seed").value = g.seed ?? -1; $("cameraFixed").checked = !!(g.params && g.params.camera_fixed); parentId = g.id; $("create").scrollIntoView({behavior: "smooth"}); toast("Loaded. Change the motion, approve, generate."); break;
+      case "redo": setKind("video"); source = state.generations.find(x => refOf(x) === g.input_image || x.url === g.input_image || x.path === g.input_image) || {name: "previous still", url: g.input_image, prompt: ""}; renderSource(); $("still").value = g.input_image || ""; setFields(g.fields); if (!g.fields) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true); $("negative").value = g.negative || ""; $("vidModel").value = g.model || "pro"; settings.duration = (g.params && g.params.duration_s) || 10; $("seed").value = g.seed ?? -1; $("cameraFixed").checked = !!(g.params && g.params.camera_fixed); parentId = g.id; renderChips(); estimate(); toCreate(); toast("Loaded. Change the motion, approve, generate."); break;
       case "extend": {
         toast("Capturing the last frame…");
         try {
@@ -624,8 +694,8 @@
           const up = await uploadDataUrl(dataUrl, (g.name || "clip").replace(/\.[^.]+$/, "") + "-last", "still");
           setKind("video"); source = {name: up.name, url: up.url, path: up.path, prompt: g.prompt}; renderSource();
           setFields(g.fields); if (!g.fields) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true);
-          $("vidModel").value = g.model || "pro"; $("seed").value = g.seed ?? -1; parentId = g.id;
-          $("create").scrollIntoView({behavior: "smooth"}); toast("Last frame ready as the source still. Approve and generate to continue the shot.");
+          $("vidModel").value = g.model || "pro"; $("seed").value = g.seed ?? -1; parentId = g.id; renderChips(); estimate(); toCreate();
+          toast("Last frame is the new source still. Approve and generate to continue the shot.");
         } catch (e) { toast("Could not capture the frame: " + e.message, 5000); }
         break; }
     }
@@ -651,7 +721,8 @@
   $("showRejected").onclick = () => { filter.rejected = !filter.rejected; $("showRejected").classList.toggle("on", filter.rejected); renderBoard(); };
   $("search").addEventListener("input", () => { filter.q = $("search").value.trim(); renderBoard(); });
 
-  loadPresets().then(() => { setKind("image"); load(); });
+  renderChips();
+  loadPresets().then(() => { setKind("image"); let v = "create"; try { v = localStorage.getItem("view") || "create"; } catch {} showView(v); load(); });
 })();
 </script>
 </body>
