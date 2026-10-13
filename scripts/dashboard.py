@@ -458,6 +458,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._file(HERE.parent / "public" / "index.html", "text/html; charset=utf-8")
         if path == "/presets.json":
             return self._file(HERE.parent / "public" / "presets.json", "application/json; charset=utf-8")
+        if path == "/app.js":
+            return self._file(HERE.parent / "public" / "app.js", "text/javascript; charset=utf-8")
         if path == "/api/state":
             return self._json(state())
         if path == "/api/tasks":

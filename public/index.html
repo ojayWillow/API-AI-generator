@@ -3,138 +3,175 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Generate studio</title>
+<title>Reik Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     color-scheme: dark;
-    --page: #0d0d0d; --surface: #161616; --surface-2: #1f1f1f; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
-    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
-    --series: #3987e5; --series-track: #184f95; --accent: #3987e5;
-    --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --good-text: #0ca30c; --star: #eda100;
-    --side: 200px; --controls: 380px;
-  }
-  @media (prefers-color-scheme: light) {
-    :root[data-theme="light"] {
-      color-scheme: light;
-      --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f1f1ee; --ink: #0b0b0b; --ink-2: #52514e;
-      --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10); --series: #2a78d6; --series-track: #cde2fb; --accent: #2a78d6; --good-text: #006300;
-    }
+    --page: #0f1113; --panel: #131517; --ctl: #1c1e20; --ctl-2: #24272a; --line: rgba(255,255,255,0.07);
+    --ink: #f7f7f8; --ink-2: #b9bcc2; --muted: #7d8189;
+    --accent: #7c5cff; --accent-ink: #ffffff; --accent-soft: rgba(124,92,255,0.16);
+    --good: #0ca30c; --warning: #fab219; --critical: #e5484d; --star: #f5b400;
+    --grid: #26292c; --axis: #383b3f; --series: #7c5cff; --series-track: #2b2550;
+    --panel-w: 340px; --top-h: 56px;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
-  body { background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  html, body { margin: 0; }
+  body { background: var(--page); color: var(--ink); font: 14px/1.45 Inter, ui-sans-serif, system-ui, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
   a { color: inherit; }
-  h1 { font-size: 18px; margin: 0; font-weight: 600; }
-  h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
-  h3 { font-size: 11px; margin: 14px 0 6px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-  .sub { color: var(--ink-2); font-size: 13px; }
-  .muted { color: var(--muted); font-size: 12px; }
+  button { font: inherit; color: inherit; }
   .hidden { display: none !important; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .sub { color: var(--ink-2); font-size: 13px; }
+  svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
-  /* shell */
-  .app { display: grid; grid-template-columns: var(--side) 1fr; min-height: 100vh; }
-  .side { background: var(--surface); border-right: 1px solid var(--border); padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; height: 100vh; }
-  .brand { font-weight: 700; font-size: 15px; padding: 6px 10px 14px; letter-spacing: .02em; }
-  .nav { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; color: var(--ink-2); cursor: pointer; border: none; background: none; font: inherit; text-align: left; width: 100%; }
-  .nav svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  .nav.on { background: var(--surface-2); color: var(--ink); }
-  .nav:hover { color: var(--ink); }
-  .side .foot { margin-top: auto; font-size: 12px; color: var(--muted); padding: 10px; }
-  .main { min-width: 0; }
-  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--page); z-index: 10; }
-  .pill { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 13px; background: var(--surface); }
-  .pill b { font-weight: 600; }
-  .pill a { color: var(--accent); text-decoration: none; font-size: 12px; }
-  .view { padding: 16px 20px 60px; }
-  .banner { border-left: 3px solid var(--warning); background: var(--surface); padding: 10px 14px; margin-bottom: 14px; border-radius: 6px; }
-  .banner code { background: var(--page); padding: 1px 5px; border-radius: 4px; }
-  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--page); padding: 9px 14px; border-radius: 8px; font-size: 13px; z-index: 50; display: none; max-width: 90vw; }
+  /* top bar */
+  .top { position: sticky; top: 0; z-index: 30; height: var(--top-h); display: flex; align-items: center; gap: 18px; padding: 0 18px; background: rgba(15,17,19,.92); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .01em; white-space: nowrap; }
+  .logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), #c04cff); display: grid; place-items: center; font-weight: 800; color: #fff; font-size: 14px; }
+  .tabs { display: flex; gap: 4px; }
+  .tab { background: none; border: none; color: var(--ink-2); padding: 7px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 7px; }
+  .tab:hover { color: var(--ink); }
+  .tab.on { background: var(--ctl); color: var(--ink); }
+  .top .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .credits { display: inline-flex; align-items: center; gap: 8px; background: var(--ctl); border-radius: 999px; padding: 6px 12px; font-size: 13px; }
+  .credits b { font-weight: 600; }
+  .credits a { color: var(--accent); text-decoration: none; font-weight: 500; }
 
-  /* create layout */
-  .create { display: grid; grid-template-columns: var(--controls) 1fr; gap: 16px; align-items: start; }
-  .controls { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; position: sticky; top: 64px; max-height: calc(100vh - 80px); overflow: auto; }
-  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--page); }
-  .seg.full { display: flex; }
-  .seg button { background: none; border: none; padding: 7px 12px; color: var(--ink-2); cursor: pointer; font: inherit; flex: 1; }
-  .seg button.on { background: var(--surface-2); color: var(--ink); font-weight: 600; }
-  .seg.mode button.on { background: var(--accent); color: #fff; }
-  label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
-  input[type=text], input[type=number], input[type=search], select, textarea {
-    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--page); color: var(--ink); font: inherit;
-  }
-  textarea { resize: vertical; }
-  textarea.prompt { min-height: 120px; font-size: 14px; padding: 12px; line-height: 1.5; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-  .row.one { grid-template-columns: 1fr; }
-  .row.three { grid-template-columns: 1fr 1fr 1fr; }
-  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-  .chip { border: 1px solid var(--border); border-radius: 20px; padding: 5px 11px; font-size: 12px; color: var(--ink-2); background: var(--page); cursor: pointer; }
-  .chip.on { border-color: var(--accent); color: var(--ink); background: var(--surface-2); }
-  .drop { border: 1px dashed var(--border); border-radius: 10px; padding: 10px; display: flex; gap: 10px; align-items: center; min-height: 72px; background: var(--page); }
-  .drop img { width: 44px; height: 60px; object-fit: cover; border-radius: 4px; background: var(--surface-2); }
-  .drop .grow { flex: 1; min-width: 0; }
-  .refs { display: flex; flex-wrap: wrap; gap: 8px; }
-  .ref { position: relative; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 2px solid transparent; cursor: pointer; background: var(--surface-2); }
+  .banner { margin: 12px 18px 0; border-left: 3px solid var(--warning); background: var(--panel); padding: 10px 14px; border-radius: 8px; }
+  .banner code { background: var(--ctl); padding: 1px 5px; border-radius: 4px; }
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--ink); color: #111; padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 500; z-index: 80; display: none; max-width: 90vw; box-shadow: 0 8px 30px rgba(0,0,0,.4); }
+
+  /* create view */
+  .create { display: grid; grid-template-columns: var(--panel-w) minmax(0, 1fr); min-height: calc(100vh - var(--top-h)); }
+  .panel { background: var(--panel); border-right: 1px solid var(--line); padding: 14px; display: flex; flex-direction: column; gap: 12px; position: sticky; top: var(--top-h); height: calc(100vh - var(--top-h)); overflow: auto; }
+  .panel > * { flex-shrink: 0; }
+  .modetabs { display: flex; gap: 18px; border-bottom: 1px solid var(--line); }
+  .modetabs button { background: none; border: none; padding: 4px 0 10px; color: var(--muted); cursor: pointer; font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .modetabs button.on { color: var(--ink); border-color: var(--ink); }
+  .presetcard { position: relative; height: 92px; border-radius: 12px; overflow: hidden; background: linear-gradient(135deg, #2a1f5c, #11131a 60%, #3a1630); display: flex; align-items: flex-end; padding: 10px 12px; }
+  .presetcard .bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: .55; }
+  .presetcard .bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(0,0,0,.75), rgba(0,0,0,0) 70%); }
+  .presetcard .txt { position: relative; }
+  .presetcard .k { font-size: 11px; letter-spacing: .08em; color: var(--ink-2); text-transform: uppercase; }
+  .presetcard .v { font-weight: 700; font-size: 15px; }
+  .presetcard .change { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.55); border: none; border-radius: 8px; padding: 5px 9px; cursor: pointer; font-size: 12px; display: flex; gap: 6px; align-items: center; }
+  .block { background: var(--ctl); border-radius: 12px; padding: 10px; }
+  .block .lbl { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .drop { border: 1px dashed rgba(255,255,255,.12); border-radius: 10px; padding: 10px; min-height: 76px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; transition: border-color .15s, background .15s; }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop .hint { flex: 1; min-width: 120px; color: var(--muted); font-size: 12px; }
+  .ref { position: relative; width: 52px; height: 52px; border-radius: 8px; overflow: hidden; border: 2px solid transparent; cursor: pointer; background: var(--ctl-2); }
   .ref img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .ref.on { border-color: var(--accent); }
-  .ref.add { display: flex; align-items: center; justify-content: center; border: 1px dashed var(--border); color: var(--ink-2); font-size: 20px; }
-  details { border-top: 1px solid var(--grid); margin-top: 12px; padding-top: 8px; }
-  summary { cursor: pointer; font-size: 12px; color: var(--ink-2); list-style: none; display: flex; align-items: center; gap: 6px; }
-  summary::before { content: "▸"; font-size: 11px; }
-  details[open] summary::before { content: "▾"; }
-  details .inner { padding-top: 10px; }
-  .check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
-  .linkbtn { background: none; border: none; color: var(--ink-2); text-decoration: underline; cursor: pointer; font: inherit; font-size: 12px; padding: 0; }
-  .footer { position: sticky; bottom: -14px; background: var(--surface); padding: 12px 0 2px; margin-top: 12px; border-top: 1px solid var(--grid); }
-  .cost { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--ink-2); margin-bottom: 8px; gap: 8px; }
-  .cost b { color: var(--ink); font-size: 14px; }
-  button.primary { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 11px 14px; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; }
-  button.primary:disabled { opacity: .45; cursor: not-allowed; }
-  button.ghost, a.ghost { background: none; border: 1px solid var(--border); color: var(--ink); border-radius: 8px; padding: 6px 11px; font: inherit; font-size: 12px; cursor: pointer; text-decoration: none; display: inline-block; }
-  button.ghost.on { border-color: var(--accent); color: var(--accent); }
-  .msg { font-size: 12px; color: var(--ink-2); margin-top: 6px; min-height: 16px; }
+  .ref.add { display: grid; place-items: center; border: 1px dashed rgba(255,255,255,.18); color: var(--ink-2); }
+  .srcrow { display: flex; gap: 10px; align-items: center; width: 100%; }
+  .srcrow img { width: 44px; height: 60px; object-fit: cover; border-radius: 6px; }
+  .srcrow .grow { flex: 1; min-width: 0; }
+  .ellip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .url { width: 100%; margin-top: 8px; background: var(--page); border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 12px; }
+  .promptbox { background: var(--ctl); border-radius: 12px; padding: 10px 10px 8px; border: 1px solid transparent; }
+  .promptbox:focus-within { border-color: rgba(124,92,255,.5); }
+  .promptbox textarea { width: 100%; min-height: 110px; resize: vertical; background: transparent; border: none; outline: none; color: var(--ink); font: inherit; font-size: 14px; line-height: 1.5; }
+  .promptbox .bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+  .mini { display: inline-flex; align-items: center; gap: 6px; background: var(--ctl-2); border: none; border-radius: 7px; padding: 5px 9px; font-size: 12px; color: var(--ink-2); cursor: pointer; }
+  .mini.on { color: var(--ink); background: var(--accent-soft); }
+  .frag { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .modelrow { display: flex; align-items: center; gap: 10px; background: var(--ctl); border-radius: 10px; padding: 6px 12px; min-height: 48px; }
+  .modelrow .k { font-size: 11px; color: var(--muted); }
+  .modelrow select { background: transparent; border: none; color: var(--ink); font: inherit; font-weight: 600; width: 100%; padding: 0; outline: none; cursor: pointer; }
+  .modelrow select option { background: var(--panel); }
+  .pills { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .pill { height: 40px; background: var(--ctl); border: none; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; font-size: 13px; white-space: nowrap; padding: 0 8px; }
+  .pill:hover { background: var(--ctl-2); }
+  .pill.on { box-shadow: inset 0 0 0 1px var(--accent); }
+  .note { font-size: 12px; color: var(--muted); line-height: 1.4; }
+  details.more { background: var(--ctl); border-radius: 10px; padding: 8px 10px; }
+  details.more summary { cursor: pointer; font-size: 13px; color: var(--ink-2); list-style: none; display: flex; justify-content: space-between; }
+  details.more summary::after { content: "+"; color: var(--muted); }
+  details.more[open] summary::after { content: "–"; }
+  details.more .in { padding-top: 10px; display: grid; gap: 8px; }
+  details.more label { font-size: 12px; color: var(--ink-2); display: block; margin-bottom: 3px; }
+  details.more input[type=text] { width: 100%; background: var(--page); border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 13px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink); }
+  .linkbtn { background: none; border: none; color: var(--ink-2); text-decoration: underline; cursor: pointer; font-size: 12px; padding: 0; }
+  .gofoot { position: sticky; bottom: -14px; background: var(--panel); padding: 10px 0 4px; margin-top: auto; display: grid; gap: 6px; }
+  .go { height: 48px; border-radius: 12px; border: none; background: var(--accent); color: var(--accent-ink); font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .go:disabled { opacity: .45; cursor: not-allowed; }
+  .go .cost { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; opacity: .9; }
+  .costline { font-size: 12px; color: var(--muted); text-align: center; }
+  .msg { font-size: 12px; color: var(--ink-2); min-height: 16px; text-align: center; }
 
-  /* feed */
-  .feed { display: grid; gap: 14px; }
-  .feed-head { display: flex; justify-content: space-between; align-items: center; color: var(--ink-2); font-size: 13px; }
-  .gen { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-  .gen .top { display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; font-size: 12px; color: var(--ink-2); border-bottom: 1px solid var(--grid); }
-  .gen .top .p { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .gen .items { display: grid; gap: 10px; padding: 12px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
-  .gen.running .items { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
-  .skel { aspect-ratio: 9 / 14; border-radius: 8px; background: linear-gradient(100deg, var(--surface-2) 30%, var(--grid) 50%, var(--surface-2) 70%); background-size: 200% 100%; animation: sh 1.6s infinite; display: flex; align-items: flex-end; padding: 8px; font-size: 12px; color: var(--ink-2); }
+  /* work area */
+  .work { padding: 14px 18px 60px; min-width: 0; }
+  .worktop { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .seg { display: inline-flex; background: var(--panel); border-radius: 9px; padding: 3px; gap: 2px; }
+  .seg button { background: none; border: none; color: var(--ink-2); padding: 6px 11px; border-radius: 7px; cursor: pointer; display: flex; gap: 6px; align-items: center; font-size: 13px; }
+  .seg button.on { background: var(--ctl-2); color: var(--ink); }
+  .worktop .r { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .feed { display: grid; gap: 12px; }
+  .grow-row { display: grid; grid-template-columns: minmax(0, 1fr) 300px; background: var(--panel); border-radius: 14px; overflow: hidden; }
+  .rowmedia { background: #0a0b0c; height: 400px; display: flex; align-items: center; justify-content: center; position: relative; cursor: zoom-in; }
+  .rowmedia > img, .rowmedia > video { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+  .rowmedia.multi { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; padding: 6px; cursor: default; height: auto; min-height: 300px; }
+  .tile { position: relative; background: #000; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; max-height: 380px; cursor: zoom-in; }
+  .tile img, .tile video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .tile.starred { box-shadow: inset 0 0 0 2px var(--star); }
+  .tile.rejected { opacity: .35; }
+  .tile .tbar { position: absolute; left: 6px; right: 6px; bottom: 6px; display: flex; gap: 4px; justify-content: flex-end; opacity: 0; transition: opacity .15s; }
+  .tile:hover .tbar { opacity: 1; }
+  .rowinfo { padding: 14px; display: flex; flex-direction: column; gap: 10px; border-left: 1px solid var(--line); min-width: 0; }
+  .thumbs { display: flex; gap: 6px; }
+  .thumbs img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; background: var(--ctl); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--ink-2); }
+  .chip.acc { background: var(--accent-soft); color: var(--ink); }
+  .prompt { color: var(--ink); font-size: 13px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+  .inote { color: var(--ink-2); font-style: italic; font-size: 12px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; background: var(--ctl); border: none; border-radius: 8px; padding: 7px 11px; cursor: pointer; font-size: 13px; text-decoration: none; }
+  .btn:hover { background: var(--ctl-2); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.ic { padding: 7px; }
+  .btn.ic.on.star { color: var(--star); }
+  .btn.ic.on.rej { color: var(--critical); }
+  .btn.ic.on.cmp { color: var(--accent); }
+  .badge { position: absolute; top: 8px; left: 8px; font-size: 11px; background: rgba(0,0,0,.65); padding: 2px 7px; border-radius: 6px; z-index: 2; }
+  .badge.r { left: auto; right: 8px; }
+  .skel { background: linear-gradient(100deg, var(--ctl) 30%, var(--ctl-2) 50%, var(--ctl) 70%); background-size: 200% 100%; animation: sh 1.6s infinite; display: flex; align-items: center; justify-content: center; color: var(--ink-2); font-size: 13px; }
   @keyframes sh { from { background-position: 200% 0 } to { background-position: -200% 0 } }
-  .item { background: var(--surface-2); border: 1px solid transparent; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; position: relative; }
-  .item.starred { border-color: var(--star); }
-  .item.rejected { opacity: .5; }
-  .item.cmp { outline: 2px solid var(--accent); }
-  .item .media { background: var(--page); aspect-ratio: 9 / 14; display: flex; align-items: center; justify-content: center; cursor: zoom-in; }
-  .item img, .item video { width: 100%; height: 100%; object-fit: contain; display: block; }
-  .item .body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-  .item .prompt { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .item .meta { color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
-  .item .note { color: var(--ink-2); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .item .btns { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
-  .item .btns button, .item .btns a { font-size: 11px; padding: 3px 7px; border-radius: 6px; }
-  .item .btns button.star.on { border-color: var(--star); color: var(--star); }
-  .item .btns button.rej.on { border-color: var(--critical); color: var(--critical); }
-  .badge { position: absolute; top: 6px; left: 6px; font-size: 11px; background: rgba(0,0,0,.6); color: #fff; padding: 2px 6px; border-radius: 4px; }
-  .state { position: absolute; top: 6px; right: 6px; font-size: 11px; background: rgba(0,0,0,.6); color: #fff; padding: 2px 6px; border-radius: 4px; }
-  .empty { color: var(--muted); padding: 40px; text-align: center; background: var(--surface); border: 1px dashed var(--border); border-radius: 12px; }
+  .err { background: var(--panel); border-left: 3px solid var(--critical); border-radius: 10px; padding: 10px 14px; font-size: 13px; }
+  .empty { background: var(--panel); border-radius: 14px; padding: 48px 24px; text-align: center; color: var(--ink-2); }
+  .empty b { display: block; color: var(--ink); font-size: 18px; margin-bottom: 6px; }
 
-  /* library */
-  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
-  .toolbar input[type=search] { width: 240px; }
-  .board { display: grid; gap: 14px; }
-  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  /* masonry grid */
+  .masonry { column-width: 230px; column-gap: 12px; }
+  .masonry > .gcard { break-inside: avoid; margin-bottom: 12px; }
+  .gcard { position: relative; border-radius: 12px; overflow: hidden; background: var(--panel); cursor: zoom-in; }
+  .gcard img, .gcard video { width: 100%; display: block; }
+  .gcard.starred { box-shadow: inset 0 0 0 2px var(--star); }
+  .gcard.rejected { opacity: .4; }
+  .gcard .ov { position: absolute; inset: auto 0 0 0; padding: 30px 10px 10px; background: linear-gradient(0deg, rgba(0,0,0,.85), rgba(0,0,0,0)); opacity: 0; transition: opacity .15s; }
+  .gcard:hover .ov { opacity: 1; }
+  .gcard .ov .p { font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 8px; }
+  .gcard .ov .actions { margin: 0; }
+  .gcard .ov .btn { background: rgba(255,255,255,.12); padding: 6px 9px; font-size: 12px; }
+  .gcard .ov .btn.primary { background: var(--accent); }
+  .datehead { font-size: 13px; color: var(--ink-2); font-weight: 600; margin: 18px 0 10px; }
 
-  /* spend */
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 14px; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
-  .tile .label { color: var(--ink-2); font-size: 13px; }
-  .tile .value { font-size: 28px; font-weight: 600; margin: 4px 0 2px; }
-  .tile.hero .value { font-size: 44px; line-height: 1.1; }
-  .tile .note { color: var(--muted); font-size: 12px; }
+  /* library + spend */
+  .page { padding: 16px 18px 70px; max-width: 1500px; margin: 0 auto; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .toolbar input[type=search] { background: var(--panel); border: 1px solid var(--line); color: var(--ink); border-radius: 9px; padding: 8px 11px; font: inherit; width: 260px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .card { background: var(--panel); border-radius: 14px; padding: 16px; }
+  .tile-k { color: var(--ink-2); font-size: 13px; }
+  .tile-v { font-size: 28px; font-weight: 600; margin: 4px 0 2px; }
+  .hero .tile-v { font-size: 44px; line-height: 1.1; }
+  .tile-n { color: var(--muted); font-size: 12px; }
   .meter { height: 8px; border-radius: 4px; background: var(--series-track); overflow: hidden; margin: 8px 0 6px; }
   .meter > div { height: 100%; background: var(--series); border-radius: 4px; }
   .meter.warn > div { background: var(--warning); }
@@ -144,669 +181,181 @@
   .status.warn::before { background: var(--warning); }
   .status.over::before { background: var(--critical); }
   .chart-wrap { position: relative; }
-  .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  svg text { font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--muted); }
+  .chart-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .chart-head h2 { font-size: 15px; margin: 0 0 12px; }
+  svg text { font: 11px Inter, system-ui, sans-serif; fill: var(--muted); }
   svg .lbl { fill: var(--ink-2); font-weight: 600; }
-  svg .grid { stroke: var(--grid); stroke-width: 1; }
+  svg .gridl { stroke: var(--grid); stroke-width: 1; }
   svg .base { stroke: var(--axis); stroke-width: 1; }
   svg .bar { fill: var(--series); pointer-events: none; }
   svg .hit { fill: transparent; }
   svg .hit:hover { fill: var(--grid); opacity: .5; }
-  .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.3); display: none; z-index: 5; }
-  .tip b { display: block; color: var(--ink); }
+  .tip { position: absolute; pointer-events: none; background: var(--ctl); border-radius: 8px; padding: 6px 9px; font-size: 12px; display: none; z-index: 5; }
+  .tip b { display: block; }
   .tip span { color: var(--ink-2); }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
-  /* modal */
-  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: none; align-items: center; justify-content: center; z-index: 40; padding: 20px; }
-  .modal.on { display: flex; }
-  .modal .box { background: var(--surface); border-radius: 12px; padding: 14px; max-width: 1200px; width: 100%; max-height: 95vh; overflow: auto; }
-  .modal .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .modal .pair.single { grid-template-columns: 1fr; }
-  .modal .pair img, .modal .pair video { width: 100%; max-height: 72vh; object-fit: contain; background: var(--page); border-radius: 8px; }
-  .modal .cap { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
-  .modal .close { float: right; }
+  /* popover + viewer */
+  .pop { position: fixed; z-index: 60; background: var(--ctl); border: 1px solid var(--line); border-radius: 12px; padding: 6px; min-width: 180px; box-shadow: 0 12px 40px rgba(0,0,0,.5); display: none; max-height: 60vh; overflow: auto; }
+  .pop button { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 14px; background: none; border: none; padding: 8px 10px; border-radius: 8px; cursor: pointer; text-align: left; font-size: 13px; }
+  .pop button:hover { background: var(--ctl-2); }
+  .pop button.on { color: var(--accent); }
+  .pop button .s { color: var(--muted); font-size: 12px; }
+  .viewer { position: fixed; inset: 0; z-index: 50; background: rgba(5,6,7,.92); display: none; }
+  .viewer.on { display: grid; grid-template-columns: minmax(0, 1fr) 320px; }
+  .viewer .stage { display: flex; align-items: center; justify-content: center; padding: 24px; position: relative; min-width: 0; }
+  .viewer .stage img, .viewer .stage video { max-width: 100%; max-height: calc(100vh - 48px); object-fit: contain; border-radius: 8px; }
+  .viewer .stage.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .viewer .side { background: var(--panel); padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+  .viewer .nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,.1); border: none; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; display: grid; place-items: center; }
+  .viewer .nav.l { left: 16px; } .viewer .nav.r { right: 16px; }
 
-  @media (max-width: 1000px) { .create { grid-template-columns: 1fr; } .controls { position: static; max-height: none; } }
+  @media (max-width: 1000px) {
+    .create { grid-template-columns: 1fr; }
+    .panel { position: static; height: auto; border-right: none; }
+    .grow-row { grid-template-columns: 1fr; }
+    .rowinfo { border-left: none; border-top: 1px solid var(--line); }
+    .rowmedia { height: 320px; }
+    .viewer.on { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  }
   @media (max-width: 720px) {
-    .app { grid-template-columns: 1fr; }
-    .side { position: fixed; bottom: 0; left: 0; right: 0; top: auto; height: auto; flex-direction: row; justify-content: space-around; padding: 6px; border-right: none; border-top: 1px solid var(--border); z-index: 20; }
-    .brand, .side .foot { display: none; }
-    .nav { flex-direction: column; gap: 2px; font-size: 11px; padding: 6px 10px; width: auto; }
-    .view { padding: 12px 12px 90px; }
-    .topbar { padding: 10px 12px; }
+    .top { padding: 0 12px; backdrop-filter: none; background: var(--page); }
+    .tabs { position: fixed; bottom: 0; left: 0; right: 0; justify-content: space-around; background: var(--panel); border-top: 1px solid var(--line); padding: 6px; z-index: 30; }
+    .tab { flex-direction: column; gap: 2px; font-size: 11px; }
+    .work, .page { padding-bottom: 90px; }
+    .credits .muted { display: none; }
   }
 </style>
 </head>
 <body>
-<div class="app">
-  <aside class="side">
-    <div class="brand">Generate</div>
-    <button class="nav on" data-view="create"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg>Create</button>
-    <button class="nav" data-view="library"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Library</button>
-    <button class="nav" data-view="spend"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 16V9M11 16V5M16 16v-6"/></svg>Spend</button>
-    <div class="foot" id="dir"></div>
-  </aside>
+<header class="top">
+  <div class="brand"><span class="logo" id="logo">R</span><span id="brandName">Reik Studio</span></div>
+  <nav class="tabs">
+    <button class="tab on" data-view="create"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create</button>
+    <button class="tab" data-view="library"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Library</button>
+    <button class="tab" data-view="spend"><svg class="i" viewBox="0 0 24 24"><path d="M4 19h16M7 16V10M12 16V6M17 16v-4"/></svg>Spend</button>
+  </nav>
+  <div class="right"><span class="credits" id="creditsPill">…</span></div>
+</header>
+<div id="banner" class="banner hidden"></div>
 
-  <div class="main">
-    <div class="topbar">
-      <h1 id="viewTitle">Create</h1>
-      <div style="display:flex;gap:8px;align-items:center">
-        <span class="pill" id="creditsPill">…</span>
-        <span class="sub" id="updated"></span>
+<div id="view-create" class="create">
+  <form class="panel" id="form" autocomplete="off">
+    <div class="modetabs"><button type="button" id="kindImage" class="on">Create Image</button><button type="button" id="kindVideo">Create Video</button></div>
+
+    <div class="presetcard" id="presetCard"><div class="bg" id="presetBg"></div><div class="txt"><div class="k">Preset</div><div class="v" id="presetName">None</div></div><button type="button" class="change" id="presetChange">Change</button></div>
+    <select id="preset" class="hidden"><option value="">No preset</option></select>
+
+    <div class="block" id="imageOptions">
+      <div class="lbl"><span>References</span><span id="refHint"></span></div>
+      <div class="drop" id="refs"></div>
+      <input type="file" id="refFile" accept="image/png,image/jpeg,image/webp,image/gif" multiple class="hidden">
+    </div>
+    <div class="block hidden" id="videoOptions">
+      <div class="lbl"><span>Start frame</span></div>
+      <div class="drop" id="source"></div>
+      <input type="text" class="url" id="still" placeholder="…or paste an image URL">
+    </div>
+
+    <div class="promptbox">
+      <textarea id="prompt" placeholder="Describe the shot"></textarea>
+      <div class="bar">
+        <button type="button" class="mini" id="helperBtn">Prompt helper</button>
+        <button type="button" class="mini on hidden" id="pillAudio">Audio on</button>
+        <button type="button" class="mini hidden" id="pillCam">Camera fixed</button>
+      </div>
+      <div class="frag" id="presetFrag"></div>
+      <div id="helper" class="hidden" style="margin-top:8px;display:grid;gap:6px">
+        <div id="imageBuilder" class="two">
+          <input type="text" class="url" id="f_subject" placeholder="Subject">
+          <input type="text" class="url" id="f_setting" placeholder="Setting">
+          <input type="text" class="url" id="f_camera" placeholder="Camera and lens">
+          <input type="text" class="url" id="f_light" placeholder="Lighting">
+          <input type="text" class="url" id="f_mood" placeholder="Mood and style">
+          <input type="text" class="url" id="f_details" placeholder="Details">
+        </div>
+        <div id="videoBuilder" class="two hidden">
+          <input type="text" class="url" id="m_camera" placeholder="Camera move">
+          <input type="text" class="url" id="m_subject" placeholder="Subject motion">
+          <input type="text" class="url" id="m_atmo" placeholder="Atmosphere and sound">
+          <input type="text" class="url" id="m_keep" placeholder="Keep still">
+        </div>
+        <div class="muted">The fields write into the prompt. <button type="button" class="linkbtn" id="rebuild">Rebuild</button></div>
       </div>
     </div>
 
-    <div class="view" id="view-create">
-      <div id="banner" class="banner hidden"></div>
-      <div class="create">
-        <form class="controls" id="form" autocomplete="off">
-          <div class="seg mode full"><button type="button" id="kindImage" class="on">Image</button><button type="button" id="kindVideo">Video</button></div>
-
-          <h3>Model</h3>
-          <select id="imgModel"><option value="nano-banana-2">Nano Banana 2 · fast, references</option><option value="gpt-image-2">GPT Image 2 · readable text</option></select>
-          <select id="vidModel" class="hidden"><option value="2.5">Seedance 2.5 · draft at 480p, final at 1080p</option></select>
-
-          <div id="imageOptions">
-            <h3>References <span class="muted" id="refHint"></span></h3>
-            <div class="refs" id="refs"></div>
-            <div class="muted" style="margin-top:4px">Click + or drop images here. Photos are resized in the browser before upload. HEIC is not supported.</div>
-            <input type="file" id="refFile" accept="image/png,image/jpeg,image/webp,image/gif" multiple class="hidden">
-          </div>
-          <div id="videoOptions" class="hidden">
-            <h3>Source still</h3>
-            <div class="drop" id="source"></div>
-            <input type="text" id="still" placeholder="…or paste an image URL" style="margin-top:8px">
-          </div>
-
-          <h3>Prompt</h3>
-          <select id="preset" style="margin-bottom:8px"><option value="">No preset</option></select>
-          <textarea id="prompt" class="prompt"></textarea>
-          <div class="muted" id="presetFrag" style="margin-top:4px"></div>
-
-          <div id="imageSettings">
-            <h3>Aspect ratio</h3>
-            <div class="chips" id="aspectChips"></div>
-            <h3>Resolution</h3>
-            <div class="chips" id="resChips"></div>
-            <h3>Variations</h3>
-            <div class="chips" id="countChips"></div>
-          </div>
-          <div id="videoSettings" class="hidden">
-            <div id="vresWrap"><h3>Quality</h3><div class="chips" id="vresChips"></div><div class="muted" id="vresNote" style="margin-top:4px"></div></div>
-            <h3>Duration</h3>
-            <div class="chips" id="durChips"></div>
-            <div id="vcountWrap"><h3>Drafts to make</h3><div class="chips" id="vcountChips"></div></div>
-            <div class="row" style="margin-top:10px">
-              <div><label class="check"><input type="checkbox" id="audio" checked> Generate audio</label></div>
-              <div><label class="check"><input type="checkbox" id="cameraFixed"> Camera fixed</label></div>
-            </div>
-            <input type="hidden" id="seed" value="-1">
-          </div>
-
-          <details id="helper"><summary>Prompt helper</summary><div class="inner">
-            <div id="imageBuilder">
-              <div class="row"><div><label for="f_subject">Subject</label><input type="text" id="f_subject" placeholder="a Roman senator waking up"></div><div><label for="f_setting">Setting</label><input type="text" id="f_setting" placeholder="marble villa bedroom at dawn"></div></div>
-              <div class="row"><div><label for="f_camera">Camera and lens</label><input type="text" id="f_camera" placeholder="35mm, eye level"></div><div><label for="f_light">Lighting</label><input type="text" id="f_light" placeholder="warm sunlight"></div></div>
-              <div class="row"><div><label for="f_mood">Mood and style</label><input type="text" id="f_mood" placeholder="cinematic, photoreal"></div><div><label for="f_details">Details</label><input type="text" id="f_details" placeholder="silk sheets, a toga on a chair"></div></div>
-            </div>
-            <div id="videoBuilder" class="hidden">
-              <div class="row"><div><label for="m_camera">Camera move</label><input type="text" id="m_camera" placeholder="slow push-in"></div><div><label for="m_subject">Subject motion</label><input type="text" id="m_subject" placeholder="head turns to the window"></div></div>
-              <div class="row"><div><label for="m_atmo">Atmosphere</label><input type="text" id="m_atmo" placeholder="curtains move, dust in the light"></div><div><label for="m_keep">Keep still</label><input type="text" id="m_keep" placeholder="face stays in frame"></div></div>
-            </div>
-            <div class="muted">Fields write into the prompt. <button type="button" class="linkbtn" id="rebuild">Rebuild from fields</button></div>
-          </div></details>
-
-          <details id="advanced"><summary>Advanced</summary><div class="inner">
-            <div class="row one"><div><label for="negative">Avoid (negative prompt)</label><input type="text" id="negative" placeholder="text, watermark, logo"></div></div>
-            <div class="row"><div><label for="imgName">File name</label><input type="text" id="imgName" placeholder="optional"></div><div><label for="vidName">Clip name</label><input type="text" id="vidName" placeholder="optional"></div></div>
-            <label class="check"><input type="checkbox" id="overrideCap"> Override spend cap for this run</label>
-          </div></details>
-
-          <div class="footer">
-            <div class="cost"><span id="costLabel">Estimated cost</span><b id="cost">–</b></div>
-            <label class="check hidden" id="approveWrap" style="margin-bottom:8px"><input type="checkbox" id="approve"> I approve this paid run</label>
-            <button type="submit" class="primary" id="goBtn">Generate</button>
-            <div class="msg" id="formMsg"></div>
-            <div style="margin-top:6px"><button type="button" class="linkbtn" id="clearBtn">Clear form</button></div>
-          </div>
-        </form>
-
-        <div class="feed" id="feed"></div>
+    <div class="modelrow"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/></svg>
+      <div style="flex:1;min-width:0"><div class="k">Model</div>
+        <select id="imgModel"><option value="nano-banana-2">Nano Banana 2</option><option value="gpt-image-2">GPT Image 2 · readable text</option></select>
+        <select id="vidModel" class="hidden"><option value="2.5">Seedance 2.5</option></select>
       </div>
     </div>
 
-    <div class="view hidden" id="view-library">
-      <div class="toolbar">
-        <div class="seg" id="kindFilter"><button type="button" data-f="all" class="on">All</button><button type="button" data-f="image">Images</button><button type="button" data-f="video">Videos</button></div>
-        <button type="button" class="ghost" id="starFilter">★ Starred</button>
-        <button type="button" class="ghost" id="showRejected">Show rejected</button>
-        <input type="search" id="search" placeholder="Search prompts and notes">
-        <button type="button" class="ghost hidden" id="compareBtn">Compare 2 selected</button>
-        <span class="sub" id="boardCount"></span>
-      </div>
-      <div class="board" id="board"></div>
+    <div class="pills" id="imageSettings">
+      <button type="button" class="pill" id="pillAspect"></button>
+      <button type="button" class="pill" id="pillRes"></button>
+      <button type="button" class="pill" id="pillCount"></button>
     </div>
+    <div class="pills hidden" id="videoSettings">
+      <button type="button" class="pill" id="pillDur"></button>
+      <button type="button" class="pill" id="pillQual"></button>
+      <button type="button" class="pill" id="pillDrafts"></button>
+    </div>
+    <div class="note hidden" id="vresNote"></div>
 
-    <div class="view hidden" id="view-spend">
-      <div class="tiles" id="tiles"></div>
-      <div class="card chart-wrap">
-        <div class="chart-head"><h2>Spend this month, per day</h2><button class="linkbtn" id="tableToggle">Table view</button></div>
-        <div id="chart"></div><div id="chartTable" class="hidden"></div><div class="tip" id="tip"></div>
+    <details class="more" id="advanced"><summary>Advanced</summary><div class="in">
+      <div><label for="negative">Avoid (negative prompt)</label><input type="text" id="negative" placeholder="text, watermark, logo"></div>
+      <div class="two"><div><label for="imgName">Image name</label><input type="text" id="imgName" placeholder="optional"></div><div><label for="vidName">Clip name</label><input type="text" id="vidName" placeholder="optional"></div></div>
+      <label class="check"><input type="checkbox" id="overrideCap"> Override spend cap for this run</label>
+    </div></details>
+    <input type="checkbox" id="audio" class="hidden" checked><input type="checkbox" id="cameraFixed" class="hidden"><input type="hidden" id="seed" value="-1">
+
+    <div class="gofoot">
+      <label class="check hidden" id="approveWrap"><input type="checkbox" id="approve"> I approve this paid run</label>
+      <button type="submit" class="go" id="goBtn"><span id="goLabel">Generate</span><span class="cost" id="cost"></span></button>
+      <div class="costline" id="costLabel"></div>
+      <div class="msg" id="formMsg"></div>
+      <div style="text-align:center"><button type="button" class="linkbtn" id="clearBtn">Clear form</button></div>
+    </div>
+  </form>
+
+  <section class="work">
+    <div class="worktop">
+      <div class="seg"><button type="button" class="on">History</button></div>
+      <div class="r">
+        <div class="seg" id="feedMode"><button type="button" data-m="list" class="on">List</button><button type="button" data-m="grid">Grid</button></div>
       </div>
     </div>
-  </div>
+    <div class="feed" id="feed"></div>
+  </section>
 </div>
 
-<div class="modal" id="modal"><div class="box"><button class="ghost close" id="modalClose">Close</button><div id="modalBody"></div></div></div>
+<div id="view-library" class="page hidden">
+  <div class="toolbar">
+    <div class="seg" id="kindFilter"><button type="button" data-f="all" class="on">All</button><button type="button" data-f="image">Images</button><button type="button" data-f="video">Videos</button></div>
+    <button type="button" class="btn" id="starFilter">★ Starred</button>
+    <button type="button" class="btn" id="showRejected">Show rejected</button>
+    <input type="search" id="search" placeholder="Search prompts and notes">
+    <button type="button" class="btn primary hidden" id="compareBtn">Compare 2 selected</button>
+    <span class="sub" id="boardCount"></span>
+  </div>
+  <div id="board"></div>
+</div>
+
+<div id="view-spend" class="page hidden">
+  <div class="tiles" id="tiles"></div>
+  <div class="card chart-wrap">
+    <div class="chart-head"><h2>Spend this month, per day</h2><button class="linkbtn" id="tableToggle">Table view</button></div>
+    <div id="chart"></div><div id="chartTable" class="hidden"></div><div class="tip" id="tip"></div>
+  </div>
+  <p class="muted" id="dir" style="margin-top:12px"></p>
+</div>
+
+<div class="viewer" id="viewer"><div class="stage" id="vStage"></div><aside class="side" id="vSide"></aside></div>
+<div class="pop" id="pop"></div>
 <div class="toast" id="toast"></div>
-
-<script>
-(() => {
-  const $ = (id) => document.getElementById(id);
-  const fmtUsd = (v) => "$" + (Number(v) || 0).toFixed(2);
-  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-  let state = null, presets = {}, kind = "image", manualPrompt = false, tableOpen = false;
-  const settings = {aspect: "9:16", resolution: "1K", count: 1, duration: 10, vres: "480p"};
-  let filter = {kind: "all", starred: false, rejected: false, q: ""};
-  const jobs = new Map(), polling = new Set(), refSel = [], cmpSel = [];
-  let source = null, parentId = null;
-
-  async function api(path, body) {
-    const r = await fetch(path, body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {cache: "no-store"});
-    const text = await r.text();
-    try { return JSON.parse(text); }
-    catch { return {ok: false, error: r.status === 413 ? "The upload is too large for the server (4.5 MB limit)." : `HTTP ${r.status}: ${text.slice(0, 80)}`}; }
-  }
-  function toast(msg, ms = 2600) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms); }
-  const refOf = (g) => state && state.mode === "local" && g.path ? g.path : g.url;
-
-  // ---------- navigation ----------
-  function showView(name) {
-    document.querySelectorAll(".nav").forEach(b => b.classList.toggle("on", b.dataset.view === name));
-    ["create", "library", "spend"].forEach(v => $("view-" + v).classList.toggle("hidden", v !== name));
-    $("viewTitle").textContent = {create: "Create", library: "Library", spend: "Spend"}[name];
-    if (name === "spend" && state) renderChart(state.daily, state.spend);
-    try { localStorage.setItem("view", name); } catch {}
-  }
-  document.querySelectorAll(".nav").forEach(b => b.onclick = () => showView(b.dataset.view));
-
-  // ---------- state loop ----------
-  async function load() {
-    try {
-      state = await api("/api/state");
-      if (!state.ok) throw new Error(state.error || "state failed");
-      (state.jobs || []).forEach(j => jobs.set(j.id, {...(jobs.get(j.id) || {}), ...j}));
-      render();
-    } catch (e) { $("updated").textContent = "API not reachable: " + e.message; }
-    jobs.forEach(j => { if (j.status === "running") pollJob(j.id); });
-    setTimeout(load, 20000);
-  }
-  async function pollJob(id) {
-    if (polling.has(id)) return;
-    polling.add(id);
-    try {
-      const r = await api("/api/tasks?id=" + encodeURIComponent(id));
-      if (r.ok && r.job) { jobs.set(id, r.job); renderFeed(); if (r.job.status !== "running") { setTimeout(load, 800); return; } }
-      else if (r.gone) { jobs.delete(id); renderFeed(); setTimeout(load, 800); return; }
-    } catch {} finally { polling.delete(id); }
-    const j = jobs.get(id);
-    if (j && j.status === "running") setTimeout(() => pollJob(id), state && state.mode === "vercel" ? 12000 : 4000);
-  }
-  function render() {
-    const s = state;
-    $("dir").textContent = s.mode === "vercel" ? "Stored in Vercel Blob" : "Folder: " + String(s.generations_dir || "").split(/[\\/]/).filter(Boolean).pop();
-    $("dir").title = s.generations_dir || "";
-    $("updated").textContent = new Date(s.now).toLocaleTimeString();
-    renderBanner(s); renderCredits(s); renderTiles(s); if (!$("view-spend").classList.contains("hidden")) renderChart(s.daily, s.spend);
-    renderRefs(); renderFeed(); renderBoard(); estimate();
-  }
-  function renderBanner(s) {
-    const b = $("banner");
-    if (s.key_present && !s.setup_error) { b.classList.add("hidden"); return; }
-    b.classList.remove("hidden");
-    b.innerHTML = !s.key_present
-      ? (s.mode === "vercel" ? `<b>No API key.</b> Add <code>KIE_API_KEY</code> in the Vercel project's Environment Variables, then redeploy.` : `<b>No API key.</b> Copy <code>.env.example</code> to <code>.env</code>, paste your kie.ai key, restart the dashboard.`)
-      : `<b>Setup problem.</b> ${esc(s.setup_error)}`;
-  }
-  function renderCredits(s) {
-    const c = s.credits || {};
-    $("creditsPill").innerHTML = c.value != null
-      ? `<b>${Number(c.value).toLocaleString()} credits</b> <span class="muted">≈ ${fmtUsd(c.usd)}</span> <a href="https://kie.ai/billing" target="_blank" rel="noopener">Top up</a>`
-      : `<span class="muted">${esc(c.error || "checking credits…")}</span>`;
-  }
-  function meter(used, cap) {
-    const pct = cap > 0 ? Math.min(100, used / cap * 100) : 0, r = cap > 0 ? used / cap : 0;
-    const cls = r >= 1 ? "over" : r >= 0.8 ? "warn" : "", word = cls === "over" ? "Over cap" : cls === "warn" ? "Near cap" : "Within cap";
-    return `<div class="meter ${cls}"><div style="width:${pct.toFixed(1)}%"></div></div><span class="status ${cls}">${word}, ${pct.toFixed(0)}% of ${fmtUsd(cap)}</span>`;
-  }
-  function renderTiles(s) {
-    const c = s.credits || {}, sp = s.spend;
-    const starred = s.generations.filter(g => g.rating === "star").length;
-    $("tiles").innerHTML = `
-      <div class="card tile hero"><div class="label">Credits remaining</div><div class="value">${c.value != null ? Number(c.value).toLocaleString() : "–"}</div><div class="note">${c.value != null ? "about " + fmtUsd(c.usd) + " on kie.ai" : esc(c.error || "")} <button class="linkbtn" id="refreshCredits">refresh</button></div></div>
-      <div class="card tile"><div class="label">Spent today</div><div class="value">${fmtUsd(sp.today_usd)}</div>${meter(sp.today_usd, sp.session_cap_usd)}</div>
-      <div class="card tile"><div class="label">Spent this month</div><div class="value">${fmtUsd(sp.month_usd)}</div>${meter(sp.month_usd, sp.monthly_cap_usd)}</div>
-      <div class="card tile"><div class="label">Outputs</div><div class="value">${s.generations.length}</div><div class="note">${starred} starred · ${sp.month_runs} runs this month</div></div>`;
-    $("refreshCredits").onclick = async () => { await api("/api/refresh-credits", {}); setTimeout(load, 1200); };
-  }
-
-  // ---------- chart ----------
-  function niceMax(v) { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p; return 10 * p; }
-  function renderChart(daily, spend) {
-    const host = $("chart"); const W = host.clientWidth || 600, H = 220, padL = 44, padR = 12, padT = 18, padB = 26;
-    const maxV = niceMax(Math.max(0, ...daily.map(d => d.usd)));
-    const n = daily.length, band = (W - padL - padR) / n, bw = Math.min(24, band * 0.6);
-    const y = v => padT + (H - padT - padB) * (1 - v / maxV), base = H - padB;
-    const maxIdx = daily.reduce((m, d, i) => d.usd > daily[m].usd ? i : m, 0);
-    let g = "", hits = "", bars = "";
-    for (let t = 0; t <= 4; t++) { const v = maxV * t / 4, yy = y(v); g += `<line class="${t ? "grid" : "base"}" x1="${padL}" x2="${W - padR}" y1="${yy}" y2="${yy}"/><text x="${padL - 6}" y="${yy + 4}" text-anchor="end">${v >= 1 ? "$" + v.toFixed(v % 1 ? 2 : 0) : "$" + v.toFixed(2)}</text>`; }
-    daily.forEach((d, i) => {
-      const x = padL + band * i + (band - bw) / 2, top = y(d.usd), h = Math.max(0, base - top), r = Math.min(4, h);
-      hits += `<rect class="hit" x="${padL + band * i}" y="${padT}" width="${band}" height="${H - padT - padB}" data-i="${i}"/>`;
-      bars += `<path class="bar" d="${h > 0 ? `M${x},${base} V${top + r} q0,-${r} ${r},-${r} H${x + bw - r} q${r},0 ${r},${r} V${base} Z` : ""}"/>`;
-      const day = +d.date.slice(8);
-      if (n <= 16 || day === 1 || day % 5 === 0) bars += `<text x="${padL + band * i + band / 2}" y="${H - 8}" text-anchor="middle">${day}</text>`;
-      if (i === maxIdx && d.usd > 0) bars += `<text class="lbl" x="${x + bw / 2}" y="${top - 5}" text-anchor="middle">${fmtUsd(d.usd)}</text>`;
-    });
-    host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily spend this month">${g}${hits}${bars}</svg>`;
-    const tip = $("tip");
-    host.querySelectorAll(".hit").forEach(el => {
-      el.addEventListener("mousemove", ev => { const d = daily[+el.dataset.i]; tip.innerHTML = `<b>${d.date}</b><span>${fmtUsd(d.usd)} · ${d.runs} run${d.runs === 1 ? "" : "s"}</span>`; tip.style.display = "block"; const rect = host.parentElement.getBoundingClientRect(); tip.style.left = Math.min(ev.clientX - rect.left + 12, rect.width - 150) + "px"; tip.style.top = (ev.clientY - rect.top - 10) + "px"; });
-      el.addEventListener("mouseleave", () => tip.style.display = "none");
-    });
-    $("chartTable").innerHTML = `<table><thead><tr><th>Day</th><th class="num">Runs</th><th class="num">USD</th></tr></thead><tbody>` + daily.map(d => `<tr><td>${d.date}</td><td class="num">${d.runs}</td><td class="num">${fmtUsd(d.usd)}</td></tr>`).join("") + `<tr><td><b>Month</b></td><td class="num"><b>${spend.month_runs}</b></td><td class="num"><b>${fmtUsd(spend.month_usd)}</b></td></tr></tbody></table>`;
-  }
-  $("tableToggle").onclick = () => { tableOpen = !tableOpen; $("chart").classList.toggle("hidden", tableOpen); $("chartTable").classList.toggle("hidden", !tableOpen); $("tableToggle").textContent = tableOpen ? "Chart view" : "Table view"; };
-  window.addEventListener("resize", () => state && !$("view-spend").classList.contains("hidden") && renderChart(state.daily, state.spend));
-
-  // ---------- chips ----------
-  function chips(id, values, key, labels) {
-    $(id).innerHTML = values.map(v => `<button type="button" class="chip ${settings[key] == v ? "on" : ""}" data-v="${v}">${labels ? labels[v] : v}</button>`).join("");
-    $(id).querySelectorAll(".chip").forEach(b => b.onclick = () => { settings[key] = isNaN(+b.dataset.v) ? b.dataset.v : +b.dataset.v; renderChips(); estimate(); });
-  }
-  function renderChips() {
-    chips("aspectChips", ["9:16", "16:9", "1:1", "4:5", "auto"], "aspect", {"9:16": "9:16 vertical", "16:9": "16:9", "1:1": "1:1", "4:5": "4:5", "auto": "auto"});
-    chips("resChips", ["1K", "2K", "4K"], "resolution");
-    chips("countChips", [1, 2, 3, 4], "count", {1: "1", 2: "2", 3: "3", 4: "4"});
-    const durs = [4, 5, 6, 8, 10, 12, 15];
-    if (!durs.includes(settings.duration)) settings.duration = 10;
-    chips("durChips", durs, "duration", Object.fromEntries(durs.map(d => [d, d + " s"])));
-    const pr = state && state.pricing && state.pricing.video["2.5"], rate = pr ? pr.credits_per_second : {"480p": 28, "720p": 63, "1080p": 158};
-    chips("vresChips", ["480p", "720p", "1080p"], "vres", {"480p": `Draft 480p · ${rate["480p"]} cr/s`, "720p": `720p · ${rate["720p"]} cr/s`, "1080p": `1080p direct · ${rate["1080p"]} cr/s`});
-    const isDraft = settings.vres === "480p";
-    $("vresNote").textContent = isDraft
-      ? `Drafts are cheap previews. Pick the one you like, press Finalize on it, and it is re-rendered at 1080p with the same motion for about ${fmtUsd(rate["1080p"] * 0.005)} per second. Draft ids stay valid 7 days.`
-      : `Direct render at ${settings.vres}. No draft step, no cheap preview.`;
-    $("vcountWrap").classList.toggle("hidden", !isDraft);
-    if (!isDraft) settings.count = 1;
-    chips("vcountChips", [1, 2, 3, 4], "count", {1: "1", 2: "2", 3: "3", 4: "4"});
-  }
-  $("vidModel").onchange = () => { renderChips(); estimate(); };
-  $("imgModel").onchange = () => { renderRefs(); estimate(); };
-
-  // ---------- cost estimate (client side, same table as the server) ----------
-  function estimate() {
-    if (!state) return;
-    const pr = state.pricing || {}, per = state.usd_per_credit || 0.005;
-    let credits = 0, label = "";
-    if (kind === "image") { const m = pr.image && pr.image[$("imgModel").value]; credits = m ? (m.credits[settings.resolution] || 0) * settings.count : 0; label = `${settings.count} still${settings.count > 1 ? "s" : ""} · ${settings.resolution}`; }
-    else {
-      const m = pr.video && pr.video["2.5"];
-      const rate = m ? (m.credits_per_second[settings.vres] || 0) : 0;
-      const isDraft = settings.vres === "480p", n = isDraft ? settings.count : 1;
-      credits = Math.round(rate * settings.duration) * n;
-      label = isDraft ? `${n} draft${n > 1 ? "s" : ""} · ${settings.duration} s · 480p` : `${settings.duration} s · ${settings.vres}`;
-    }
-    const usd = credits * per, left = state.spend ? Math.min(state.spend.remaining_today_usd, state.spend.remaining_month_usd) : null;
-    $("costLabel").textContent = label + (left != null ? ` · ${fmtUsd(left)} left under cap` : "");
-    $("cost").textContent = `${fmtUsd(usd)} · ${credits} cr`;
-    const isDraft = kind === "video" && settings.vres === "480p";
-    $("goBtn").textContent = kind === "image" ? (settings.count > 1 ? `Generate ${settings.count} variations` : "Generate image")
-      : isDraft ? (settings.count > 1 ? `Make ${settings.count} drafts` : "Make draft") : `Render ${settings.vres}`;
-  }
-
-  // ---------- presets and builder ----------
-  async function loadPresets() {
-    try { presets = await (await fetch("/presets.json", {cache: "no-store"})).json(); } catch { presets = {}; }
-    $("preset").innerHTML = `<option value="">No preset</option>` + Object.entries(presets).map(([k, p]) => `<option value="${esc(k)}">${esc(p.label || k)}</option>`).join("");
-  }
-  function preset() { return presets[$("preset").value] || null; }
-  function applyPreset() {
-    const p = preset();
-    $("presetFrag").textContent = p ? "Preset adds: " + (kind === "image" ? p.still : p.motion) : "";
-    if (!p) { compose(); return; }
-    if (p.aspect) settings.aspect = p.aspect;
-    if (p.image_model) $("imgModel").value = p.image_model;
-    if (p.duration) settings.duration = p.duration;
-    $("cameraFixed").checked = !!p.camera_fixed;
-    if (p.negative && !$("negative").value) $("negative").value = p.negative;
-    renderChips(); manualPrompt = false; compose(); estimate();
-  }
-  $("preset").onchange = applyPreset;
-  const join = (parts) => parts.map(s => (s || "").trim()).filter(Boolean).join(", ");
-  function compose(force) {
-    if (manualPrompt && !force) return;
-    const p = preset();
-    $("prompt").value = kind === "image"
-      ? join([$("f_subject").value, $("f_setting").value, p && p.still, $("f_camera").value, $("f_light").value, $("f_mood").value, $("f_details").value])
-      : join([$("m_camera").value, $("m_subject").value, $("m_atmo").value, p && p.motion, $("m_keep").value ? "keep: " + $("m_keep").value : ""]);
-  }
-  ["f_subject", "f_setting", "f_camera", "f_light", "f_mood", "f_details", "m_camera", "m_subject", "m_atmo", "m_keep"].forEach(id => $(id).addEventListener("input", () => compose()));
-  $("prompt").addEventListener("input", () => { manualPrompt = true; });
-  $("rebuild").onclick = () => { manualPrompt = false; compose(true); };
-  function fields() {
-    return kind === "image"
-      ? {subject: $("f_subject").value, setting: $("f_setting").value, camera: $("f_camera").value, lighting: $("f_light").value, mood: $("f_mood").value, details: $("f_details").value}
-      : {camera: $("m_camera").value, subject: $("m_subject").value, atmosphere: $("m_atmo").value, keep: $("m_keep").value};
-  }
-  function setFields(f) {
-    const map = kind === "image" ? {subject: "f_subject", setting: "f_setting", camera: "f_camera", lighting: "f_light", mood: "f_mood", details: "f_details"} : {camera: "m_camera", subject: "m_subject", atmosphere: "m_atmo", keep: "m_keep"};
-    Object.entries(map).forEach(([k, id]) => $(id).value = (f && f[k]) || "");
-  }
-  function setKind(k) {
-    kind = k;
-    $("kindImage").classList.toggle("on", k === "image"); $("kindVideo").classList.toggle("on", k === "video");
-    ["imgModel", "imageOptions", "imageSettings", "imageBuilder"].forEach(id => $(id).classList.toggle("hidden", k !== "image"));
-    ["vidModel", "videoOptions", "videoSettings", "videoBuilder", "approveWrap"].forEach(id => $(id).classList.toggle("hidden", k !== "video"));
-    $("prompt").placeholder = k === "image"
-      ? "Describe the shot. Example: a Roman senator waking up in a marble villa at dawn, first-person POV, warm light, no text"
-      : "Describe the motion and sound. Example: slow push-in, curtains move in the breeze, distant seagulls, keep the face in frame";
-    manualPrompt = false; applyPreset(); renderSource(); updateGo(); estimate();
-  }
-  function updateGo() { $("goBtn").disabled = kind === "video" && !$("approve").checked; }
-  $("kindImage").onclick = () => setKind("image"); $("kindVideo").onclick = () => setKind("video");
-  $("approve").onchange = updateGo;
-  $("clearBtn").onclick = () => { $("form").reset(); refSel.length = 0; source = null; parentId = null; settings.count = 1; manualPrompt = false; renderChips(); applyPreset(); renderSource(); renderRefs(); $("formMsg").textContent = ""; updateGo(); estimate(); };
-
-  // ---------- references ----------
-  function renderRefs() {
-    const host = $("refs"); if (!state) return;
-    const lib = [...(state.refs || [])];
-    const known = new Set(lib.map(r => refOf(r)));
-    refSel.forEach(r => { if (!known.has(r.ref)) lib.unshift({name: r.name, url: r.url, path: r.path}); });
-    host.innerHTML = lib.map(r => { const ref = refOf(r), on = refSel.some(s => s.ref === ref); return `<div class="ref ${on ? "on" : ""}" data-ref="${esc(ref)}" data-url="${esc(r.url)}" data-name="${esc(r.name)}" data-path="${esc(r.path || "")}" title="${esc(r.name)}"><img src="${esc(r.url)}" loading="lazy" alt=""></div>`; }).join("") + `<div class="ref add" id="refAdd" title="Upload reference images">+</div>`;
-    host.querySelectorAll(".ref:not(.add)").forEach(el => el.onclick = () => toggleRef({ref: el.dataset.ref, url: el.dataset.url, name: el.dataset.name, path: el.dataset.path || null}));
-    $("refAdd").onclick = () => $("refFile").click();
-    $("refHint").textContent = $("imgModel").value === "nano-banana-2" ? `${refSel.length}/3 selected` : "not used by GPT Image 2";
-  }
-  function toggleRef(r) {
-    const i = refSel.findIndex(s => s.ref === r.ref);
-    if (i >= 0) refSel.splice(i, 1); else { if (refSel.length >= 3) { toast("Up to 3 reference images."); return; } refSel.push(r); if ($("imgModel").value !== "nano-banana-2") { $("imgModel").value = "nano-banana-2"; toast("Switched to Nano Banana 2, which accepts references."); } }
-    renderRefs();
-  }
-  $("refFile").onchange = async (ev) => {
-    for (const f of [...ev.target.files]) { try { toast(`Uploading ${f.name}…`, 8000); const up = await uploadImage(f, f.name.replace(/\.[^.]+$/, ""), "ref"); state.refs.unshift({name: up.name, url: up.url, path: up.path}); toggleRef({ref: refOf(up), url: up.url, name: up.name, path: up.path || null}); toast(`Uploaded ${up.name}`); } catch (e) { toast("Upload failed: " + e.message, 6000); } }
-    ev.target.value = "";
-  };
-  const UPLOAD_LIMIT = 3.0 * 1024 * 1024;   // data-URL bytes; Vercel refuses request bodies over 4.5 MB
-  function fileToDataUrl(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error("could not read the file")); r.readAsDataURL(file); }); }
-  function loadImage(dataUrl) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("the browser cannot decode this image (HEIC and RAW are not supported; export it as JPEG or PNG)")); i.src = dataUrl; }); }
-  async function downscale(dataUrl, max = 2048, quality = 0.9) {
-    const img = await loadImage(dataUrl);
-    const scale = Math.min(1, max / Math.max(img.width, img.height));
-    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(img.width * scale)); c.height = Math.max(1, Math.round(img.height * scale));
-    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-    return c.toDataURL("image/jpeg", quality);
-  }
-  async function fitForUpload(dataUrl, keepPng) {
-    // Keep PNG/JPEG under the limit and at most 2048 px on the long side; otherwise re-encode smaller until it fits.
-    const img = await loadImage(dataUrl);
-    const longSide = Math.max(img.width, img.height);
-    if (keepPng && dataUrl.length <= UPLOAD_LIMIT && longSide <= 2048) return dataUrl;
-    let max = Math.min(2048, longSide), q = 0.9;
-    for (let i = 0; i < 8; i++) {
-      const out = await downscale(dataUrl, max, q);
-      if (out.length <= UPLOAD_LIMIT) return out;
-      q -= 0.1;
-      if (q < 0.6) { q = 0.85; max = Math.round(max * 0.75); }
-    }
-    throw new Error("the image is too large even after downscaling");
-  }
-  async function uploadImage(file, name, kindOfUpload) {
-    if (/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name)) throw new Error("HEIC photos are not supported by the browser. Export as JPEG or PNG first.");
-    if (!/^image\//.test(file.type)) throw new Error("not an image file");
-    const dataUrl = await fitForUpload(await fileToDataUrl(file), /^image\/(png|jpeg)/.test(file.type));
-    const r = await api("/api/upload", {name, data: dataUrl, kind: kindOfUpload});
-    if (!r.ok) throw new Error(r.error || "upload failed");
-    return r;
-  }
-  async function uploadDataUrl(dataUrl, name, kindOfUpload) {
-    const r = await api("/api/upload", {name, data: await fitForUpload(dataUrl, true), kind: kindOfUpload});
-    if (!r.ok) throw new Error(r.error || "upload failed");
-    return r;
-  }
-  // drag and drop onto the reference strip
-  $("refs").addEventListener("dragover", (e) => { e.preventDefault(); $("refs").style.outline = "2px dashed var(--accent)"; });
-  $("refs").addEventListener("dragleave", () => { $("refs").style.outline = ""; });
-  $("refs").addEventListener("drop", async (e) => {
-    e.preventDefault(); $("refs").style.outline = "";
-    for (const f of [...(e.dataTransfer.files || [])]) { try { toast(`Uploading ${f.name}…`, 8000); const up = await uploadImage(f, f.name.replace(/\.[^.]+$/, ""), "ref"); state.refs.unshift({name: up.name, url: up.url, path: up.path}); toggleRef({ref: refOf(up), url: up.url, name: up.name, path: up.path || null}); toast(`Uploaded ${up.name}`); } catch (err) { toast("Upload failed: " + err.message, 6000); } }
-  });
-
-  // ---------- video source ----------
-  function renderSource() {
-    const host = $("source");
-    if (!source) { host.innerHTML = `<div class="grow muted">Pick an image in the feed and press <b>Animate</b>, or paste a URL below.</div>`; return; }
-    host.innerHTML = `<img src="${esc(source.url)}" alt=""><div class="grow"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(source.name)}</div><div class="muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(source.prompt || "")}</div></div><button type="button" class="ghost" id="sourceClear">change</button>`;
-    $("still").value = refOf(source);
-    $("sourceClear").onclick = () => { source = null; $("still").value = ""; renderSource(); $("still").focus(); };
-  }
-  $("still").addEventListener("input", () => { if (source) { source = null; renderSource(); } });
-
-  // ---------- generate ----------
-  function payload() {
-    const base = {kind, prompt: $("prompt").value, negative: $("negative").value, fields: fields(), preset: $("preset").value || null, override_cap: $("overrideCap").checked, parent_id: parentId};
-    if (kind === "image") return {...base, model: $("imgModel").value, aspect: settings.aspect, resolution: settings.resolution, count: settings.count, name: $("imgName").value || null, refs: refSel.map(r => r.ref)};
-    const isDraft = settings.vres === "480p";
-    return {...base, image: $("still").value, model: "2.5", duration: settings.duration, resolution: settings.vres, draft: isDraft, count: isDraft ? settings.count : 1, audio: $("audio").checked, seed: $("seed").value, camera_fixed: $("cameraFixed").checked, name: $("vidName").value || null, approve: $("approve").checked};
-  }
-  async function submit(p) {
-    const j = await api("/api/generate", p);
-    if (j.ok && j.jobs) { j.jobs.forEach(job => { jobs.set(job.id, job); pollJob(job.id); }); renderFeed(); return j.jobs; }
-    throw new Error(j.error || "failed");
-  }
-  $("form").onsubmit = async (ev) => {
-    ev.preventDefault();
-    const p = payload();
-    if (!p.prompt.trim()) { $("formMsg").textContent = "Write a prompt first."; return; }
-    if (kind === "video" && !p.image.trim()) { $("formMsg").textContent = "Pick a source still first."; return; }
-    $("formMsg").textContent = "Submitting…"; $("goBtn").disabled = true;
-    try { const js = await submit(p); $("formMsg").textContent = js.length > 1 ? `${js.length} variations started.` : "Started."; $("approve").checked = false; parentId = null; showView("create"); }
-    catch (e) { $("formMsg").textContent = e.message; }
-    updateGo();
-  };
-
-  // ---------- cards ----------
-  function card(g) {
-    const media = g.kind === "video" ? `<video src="${esc(g.url)}" controls preload="metadata" muted></video>` : `<img src="${esc(g.url)}" loading="lazy" alt="${esc(g.prompt || g.name)}">`;
-    const dims = g.media && g.media.width ? `${g.media.width}x${g.media.height}${g.media.duration_s ? " · " + g.media.duration_s + "s" : ""}` : "";
-    const when = (g.created_at || g.modified || "").slice(5, 16).replace("T", " ");
-    const res = g.params && g.params.resolution ? g.params.resolution : "";
-    const isDraft = g.kind === "video" && g.params && g.params.draft;
-    const isFinal = g.model === "2.5-final";
-    const finalOf = isDraft ? state.generations.find(x => x.parent_id === g.id && x.model === "2.5-final") : null;
-    const finalCost = isDraft ? fmtUsd(((state.pricing && state.pricing.video["2.5-final"] && state.pricing.video["2.5-final"].credits_per_second) || 158) * ((g.params && g.params.duration_s) || 0) * (state.usd_per_credit || 0.005)) : "";
-    const daysLeft = isDraft && g.created_at ? Math.max(0, Math.ceil((new Date(g.created_at).getTime() + 7 * 864e5 - Date.now()) / 864e5)) : null;
-    const follow = g.kind === "image"
-      ? `<button class="ghost act" data-a="animate">Animate</button><button class="ghost act" data-a="tweak">Tweak</button><button class="ghost act" data-a="ref">Use as ref</button><button class="ghost act" data-a="reframe169">16:9</button><button class="ghost act" data-a="reframe11">1:1</button><button class="ghost act" data-a="hires">${res === "1K" || !res ? "2K" : "4K"}</button>`
-      : `${isDraft && !finalOf && daysLeft > 0 ? `<button class="ghost act" data-a="finalize" style="border-color:var(--accent);color:var(--accent)">Finalize 1080p · ${finalCost}</button>` : ""}${finalOf ? `<button class="ghost act" data-a="showfinal">1080p ready</button>` : ""}<button class="ghost act" data-a="extend">Extend</button><button class="ghost act" data-a="redo">Redo</button>`;
-    const stateBadge = isFinal ? `<span class="state">1080p final</span>` : isDraft ? `<span class="state">draft 480p${daysLeft != null ? ` · ${daysLeft}d` : ""}</span>` : "";
-    return `<div class="item ${g.rating === "star" ? "starred" : ""} ${g.rating === "reject" ? "rejected" : ""} ${cmpSel.includes(g.id) ? "cmp" : ""}" data-id="${esc(g.id)}">
-      ${g.variant ? `<span class="badge">v${g.variant}</span>` : ""}${stateBadge}
-      <div class="media act" data-a="view">${media}</div>
-      <div class="body">
-        <div class="prompt" title="${esc(g.prompt || "")}">${esc(g.prompt || g.name)}</div>
-        ${g.note ? `<div class="note" title="${esc(g.note)}">${esc(g.note)}</div>` : ""}
-        <div class="meta"><span>${esc(g.model || g.kind)}${res ? " · " + res : ""}</span><span>${g.usd != null ? fmtUsd(g.usd) : ""}</span></div>
-        <div class="meta"><span>${when}</span><span>${dims}</span></div>
-        <div class="btns">
-          <button class="ghost act star ${g.rating === "star" ? "on" : ""}" data-a="star" title="Star">★</button>
-          <button class="ghost act rej ${g.rating === "reject" ? "on" : ""}" data-a="reject" title="Reject">✕</button>
-          <button class="ghost act" data-a="note">Note</button>
-          <button class="ghost act ${cmpSel.includes(g.id) ? "on" : ""}" data-a="cmp" title="Select for compare">Cmp</button>
-          <button class="ghost act" data-a="download" title="Save to your device">Save</button>
-        </div>
-        <div class="btns">${follow}${g.path ? `<button class="ghost act" data-a="copy">Path</button>` : ""}</div>
-      </div></div>`;
-  }
-  function attach(host) {
-    host.querySelectorAll(".act").forEach(el => el.onclick = (ev) => { ev.preventDefault(); const id = el.closest(".item").dataset.id; action(el.dataset.a, state.generations.find(g => g.id === id)); });
-  }
-  function groupsOf(items) {
-    const groups = new Map();
-    items.forEach(g => { const k = g.group || "_" + g.id; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(g); });
-    return groups;
-  }
-  function setHtml(k, gs, all) {
-    const picked = all.find(x => x.rating === "star");
-    return `<div class="gen"><div class="top"><span class="p">${esc(gs[0].prompt || "")}</span><span>${all.length} variations · ${picked ? "picked " + esc(picked.name) : "pick one"}</span></div><div class="items">${gs.map(g => card(g).replace('<div class="btns">', `<div class="btns"><button class="ghost act" data-a="pick">Pick</button>`)).join("")}</div></div>`;
-  }
-
-  // ---------- feed (create view) ----------
-  function renderFeed() {
-    const host = $("feed"); if (!state) return;
-    let html = "";
-    const running = [...jobs.values()].filter(j => j.status === "running").sort((a, b) => b.started_at - a.started_at);
-    const failed = [...jobs.values()].filter(j => j.status !== "running" && j.status !== "done" && Date.now() / 1000 - (j.finished_at || j.started_at) < 600);
-    if (running.length) {
-      const byGroup = new Map(); running.forEach(j => { const k = j.group || j.id; if (!byGroup.has(k)) byGroup.set(k, []); byGroup.get(k).push(j); });
-      byGroup.forEach(js => { html += `<div class="gen running"><div class="top"><span class="p">${esc(js[0].prompt || "")}</span><span>${esc(js[0].kind)} · ${esc(js[0].model || "default")}</span></div><div class="items">${js.map(j => `<div class="skel">${esc(j.kie_state || "running")} · ${Math.round(Date.now() / 1000 - j.started_at)}s</div>`).join("")}</div></div>`; });
-    }
-    failed.forEach(j => { const r = j.result || {}; const msg = j.status === "approval_required" ? `Needs approval: ${fmtUsd(r.usd_est)} for ${r.duration_s}s on ${r.model}. Tick "I approve this paid run" and generate again.` : (r.error || j.message || "failed"); html += `<div class="gen"><div class="top" style="border:none"><span class="p" style="color:var(--critical)">${esc(j.status.replace("_", " "))}: ${esc(j.prompt || "")}</span></div><div class="muted" style="padding:0 12px 12px">${esc(msg)}</div></div>`; });
-    const items = state.generations.filter(g => !(g.rating === "reject" || g.hidden)).slice(0, 24);
-    if (!items.length && !html) { host.innerHTML = `<div class="empty">Your generations will appear here. Write a prompt on the left and press Generate.</div>`; return; }
-    html += `<div class="feed-head"><span>Recent</span><button class="ghost" id="toLibrary">Open library</button></div>`;
-    groupsOf(items).forEach((gs, k) => {
-      const all = state.generations.filter(x => x.group === k);
-      if (!k.startsWith("_") && all.length > 1) html += setHtml(k, gs, all);
-      else html += `<div class="gen"><div class="items">${gs.map(card).join("")}</div></div>`;
-    });
-    host.innerHTML = html; attach(host);
-    const tl = $("toLibrary"); if (tl) tl.onclick = () => showView("library");
-  }
-
-  // ---------- library ----------
-  function visible(g) {
-    if (filter.kind !== "all" && g.kind !== filter.kind) return false;
-    if (filter.starred && g.rating !== "star") return false;
-    if (!filter.rejected && (g.rating === "reject" || g.hidden)) return false;
-    if (filter.q) { const q = filter.q.toLowerCase(); if (!((g.prompt || "").toLowerCase().includes(q) || (g.note || "").toLowerCase().includes(q) || (g.name || "").toLowerCase().includes(q))) return false; }
-    return true;
-  }
-  function renderBoard() {
-    const host = $("board"); if (!state) return;
-    const items = state.generations.filter(visible);
-    $("boardCount").textContent = `${items.length} of ${state.generations.length}`;
-    if (!items.length) { host.innerHTML = `<div class="empty">Nothing to show. Generate something or change the filters.</div>`; return; }
-    let html = "", loose = [];
-    const flush = () => { if (loose.length) { html += `<div class="gallery">${loose.map(card).join("")}</div>`; loose = []; } };
-    groupsOf(items).forEach((gs, k) => {
-      const all = state.generations.filter(x => x.group === k);
-      if (k.startsWith("_") || all.length < 2) { loose.push(...gs); return; }
-      flush(); html += setHtml(k, gs, all);
-    });
-    flush(); host.innerHTML = html; attach(host);
-  }
-  async function setItem(g, patch) {
-    Object.assign(g, patch); renderFeed(); renderBoard();
-    const r = await api("/api/item", {id: g.id, ...patch});
-    if (!r.ok) toast("Could not save: " + (r.error || "unknown"), 4000);
-  }
-  async function action(a, g) {
-    if (!g) return;
-    const resOf = () => (g.params && g.params.resolution) || "1K";
-    const toCreate = () => { showView("create"); $("form").scrollIntoView({behavior: "smooth", block: "start"}); };
-    switch (a) {
-      case "view": openModal([g]); break;
-      case "star": await setItem(g, {rating: g.rating === "star" ? null : "star", hidden: false}); break;
-      case "reject": await setItem(g, {rating: g.rating === "reject" ? null : "reject", hidden: g.rating !== "reject"}); break;
-      case "note": { const n = prompt("Note for this item", g.note || ""); if (n !== null) await setItem(g, {note: n}); break; }
-      case "cmp": { const i = cmpSel.indexOf(g.id); if (i >= 0) cmpSel.splice(i, 1); else { if (cmpSel.length >= 2) cmpSel.shift(); cmpSel.push(g.id); } $("compareBtn").classList.toggle("hidden", cmpSel.length !== 2); renderFeed(); renderBoard(); if (cmpSel.length === 2) toast("Two selected. Compare is in the Library toolbar.", 2000); break; }
-      case "pick": { const sibs = state.generations.filter(x => x.group === g.group && x.id !== g.id); await setItem(g, {rating: "star", hidden: false}); for (const s of sibs) if (s.rating !== "star") await setItem(s, {rating: "reject", hidden: true}); toast("Picked. The others are rejected."); break; }
-      case "copy": try { await navigator.clipboard.writeText(g.path); toast("Path copied"); } catch { prompt("Path", g.path); } break;
-      case "download": await saveFile(g); break;
-      case "showfinal": { const f = state.generations.find(x => x.parent_id === g.id && x.model === "2.5-final"); if (f) openModal([g, f]); break; }
-      case "finalize": {
-        const dur = (g.params && g.params.duration_s) || 0;
-        const rate = (state.pricing && state.pricing.video["2.5-final"] && state.pricing.video["2.5-final"].credits_per_second) || 158;
-        const usd = rate * dur * (state.usd_per_credit || 0.005);
-        if (!confirm(`Render this draft at 1080p for about ${fmtUsd(usd)} (${rate * dur} credits)? It keeps the same motion. This is a paid run.`)) break;
-        toast("Starting the 1080p render…");
-        try {
-          const j = await api("/api/finalize", {id: g.id, approve: true, override_cap: $("overrideCap").checked, prompt: g.prompt});
-          if (j.ok && j.job) { jobs.set(j.job.id, j.job); pollJob(j.job.id); renderFeed(); showView("create"); }
-          else toast(j.error || "could not start the render", 5000);
-        } catch (e) { toast(e.message, 5000); }
-        break; }
-      case "animate": setKind("video"); source = g; parentId = g.id; renderSource(); toCreate(); $("prompt").focus(); break;
-      case "tweak": setKind("image"); $("preset").value = g.preset || ""; applyPreset(); setFields(g.fields); if (!g.fields || !g.fields.subject) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else { compose(true); $("helper").open = true; } $("negative").value = g.negative || ""; if (g.params) { if (g.params.aspect_ratio) settings.aspect = g.params.aspect_ratio; if (g.params.resolution) settings.resolution = g.params.resolution; } if (g.model) $("imgModel").value = g.model; refSel.length = 0; (g.refs || []).forEach(r => refSel.push({ref: r, url: r, name: r.split("/").pop()})); parentId = g.id; renderChips(); renderRefs(); estimate(); toCreate(); toast("Loaded. Edit and generate."); break;
-      case "ref": toggleRef({ref: refOf(g), url: g.url, name: g.name, path: g.path || null}); setKind("image"); toCreate(); toast("Added as a reference."); break;
-      case "reframe169": case "reframe11": {
-        const aspect = a === "reframe169" ? "16:9" : "1:1"; toast(`Generating ${aspect} version…`);
-        try { await submit({kind: "image", prompt: g.prompt, negative: g.negative || "", fields: g.fields || null, model: "nano-banana-2", aspect, resolution: resOf(), count: 1, name: (g.name || "").replace(/\.[^.]+$/, "") + "-" + aspect.replace(":", "x"), refs: [refOf(g)], parent_id: g.id, preset: g.preset || null}); showView("create"); } catch (e) { toast(e.message, 4000); }
-        break; }
-      case "hires": {
-        const next = resOf() === "1K" ? "2K" : "4K"; toast(`Generating ${next} version…`);
-        try { await submit({kind: "image", prompt: g.prompt, negative: g.negative || "", fields: g.fields || null, model: g.model === "gpt-image-2" ? "gpt-image-2" : "nano-banana-2", aspect: (g.params && g.params.aspect_ratio) || "9:16", resolution: next, count: 1, name: (g.name || "").replace(/\.[^.]+$/, "") + "-" + next, refs: g.model === "gpt-image-2" ? [] : [refOf(g)], parent_id: g.id, preset: g.preset || null}); showView("create"); } catch (e) { toast(e.message, 4000); }
-        break; }
-      case "redo": setKind("video"); source = state.generations.find(x => refOf(x) === g.input_image || x.url === g.input_image || x.path === g.input_image) || {name: "previous still", url: g.input_image, prompt: ""}; renderSource(); $("still").value = g.input_image || ""; setFields(g.fields); if (!g.fields) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true); $("negative").value = g.negative || ""; settings.duration = (g.params && g.params.duration_s) || 10; settings.vres = (g.params && g.params.draft) ? "480p" : ((g.params && /p$/.test(g.params.resolution || "")) ? g.params.resolution : "480p"); $("audio").checked = !(g.params && g.params.generate_audio === false); $("seed").value = g.seed ?? -1; $("cameraFixed").checked = !!(g.params && g.params.camera_fixed); parentId = g.id; renderChips(); estimate(); toCreate(); toast("Loaded. Change the motion, approve, generate."); break;
-      case "extend": {
-        toast("Capturing the last frame…");
-        try {
-          const dataUrl = await lastFrame(g.url);
-          const up = await uploadDataUrl(dataUrl, (g.name || "clip").replace(/\.[^.]+$/, "") + "-last", "still");
-          setKind("video"); source = {name: up.name, url: up.url, path: up.path, prompt: g.prompt}; renderSource();
-          setFields(g.fields); if (!g.fields) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true);
-          settings.vres = "480p"; settings.duration = (g.params && g.params.duration_s) || 10; parentId = g.id; renderChips(); estimate(); toCreate();
-          toast("Last frame is the new source still. Approve and make a draft to continue the shot.");
-        } catch (e) { toast("Could not capture the frame: " + e.message, 5000); }
-        break; }
-    }
-  }
-  async function saveFile(g) {
-    const name = g.name || (g.kind === "video" ? "clip.mp4" : "image.png");
-    toast(`Preparing ${name}…`, 8000);
-    try {
-      const r = await fetch(g.url, {mode: "cors"});
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const blob = await r.blob();
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-      toast(`Saved ${name} to your downloads`);
-    } catch (e) {
-      window.open(g.url, "_blank", "noopener");
-      toast("Opened in a new tab. Use the browser's Save as, or long-press on a phone.", 6000);
-    }
-  }
-  function lastFrame(url) {
-    return new Promise((res, rej) => {
-      const v = document.createElement("video"); v.crossOrigin = "anonymous"; v.muted = true; v.preload = "auto"; v.src = url;
-      v.onerror = () => rej(new Error("video could not be loaded"));
-      v.onloadedmetadata = () => { v.currentTime = Math.max(0, v.duration - 0.05); };
-      v.onseeked = () => { try { const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext("2d").drawImage(v, 0, 0); res(c.toDataURL("image/png")); } catch (e) { rej(new Error("frame is blocked by the video host (CORS)")); } };
-    });
-  }
-  function openModal(items) {
-    $("modalBody").innerHTML = `<div class="pair ${items.length === 1 ? "single" : ""}">` + items.map(g => `<div>${g.kind === "video" ? `<video src="${esc(g.url)}" controls autoplay muted loop></video>` : `<img src="${esc(g.url)}" alt="">`}<div class="cap"><b>${esc(g.name)}</b> · ${esc(g.model || "")} · ${g.usd != null ? fmtUsd(g.usd) : ""}${g.media && g.media.width ? ` · ${g.media.width}x${g.media.height}` : ""} <button class="ghost modal-save" data-id="${esc(g.id)}" style="margin-left:8px">Save</button><br>${esc(g.prompt || "")}${g.note ? `<br><i>${esc(g.note)}</i>` : ""}</div></div>`).join("") + `</div>`;
-    $("modalBody").querySelectorAll(".modal-save").forEach(b => b.onclick = () => saveFile(state.generations.find(x => x.id === b.dataset.id)));
-    $("modal").classList.add("on");
-  }
-  $("modalClose").onclick = () => $("modal").classList.remove("on");
-  $("modal").addEventListener("click", (e) => { if (e.target === $("modal")) $("modal").classList.remove("on"); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").classList.remove("on"); });
-  $("compareBtn").onclick = () => openModal(cmpSel.map(id => state.generations.find(g => g.id === id)).filter(Boolean));
-  $("kindFilter").querySelectorAll("button").forEach(b => b.onclick = () => { filter.kind = b.dataset.f; $("kindFilter").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); renderBoard(); });
-  $("starFilter").onclick = () => { filter.starred = !filter.starred; $("starFilter").classList.toggle("on", filter.starred); renderBoard(); };
-  $("showRejected").onclick = () => { filter.rejected = !filter.rejected; $("showRejected").classList.toggle("on", filter.rejected); renderBoard(); };
-  $("search").addEventListener("input", () => { filter.q = $("search").value.trim(); renderBoard(); });
-
-  renderChips();
-  loadPresets().then(() => { setKind("image"); let v = "create"; try { v = localStorage.getItem("view") || "create"; } catch {} showView(v); load(); });
-})();
-</script>
+<script src="/app.js"></script>
 </body>
 </html>
