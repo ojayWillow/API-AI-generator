@@ -63,8 +63,11 @@
       render();
     } catch (e) { $("creditsPill").textContent = "API not reachable: " + e.message; }
     jobs.forEach(j => { if (j.status === "running") pollJob(j.id); });
-    setTimeout(load, 20000);
+    clearTimeout(load._t);
+    load._t = setTimeout(() => { if (document.visibilityState === "visible") load(); else load._due = true; }, 60000);
   }
+  // Refresh when the tab comes back instead of polling in the background (keeps storage operations low).
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && load._due) { load._due = false; load(); } });
   async function pollJob(id) {
     if (polling.has(id)) return;
     polling.add(id);

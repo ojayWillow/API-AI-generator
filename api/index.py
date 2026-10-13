@@ -146,24 +146,29 @@ def blob_put(pathname: str, data: bytes, content_type: str, max_age: int = 31536
                               "x-allow-overwrite": "1", "x-cache-control-max-age": str(max_age)}), timeout=240)
 
 
-def blob_list(prefix: str, limit: int = 1000) -> list[dict]:
-    r = http("GET", f"{BLOB}/?prefix={urllib.parse.quote(prefix)}&limit={limit}", headers=blob_headers())
-    return r.get("blobs", [])
+# Operation budget (Hobby: 2,000 advanced ops = put/list/copy, 10,000 simple ops = uncached reads per month).
+# This module never calls list(). All state lives in one "index.json" read by its public URL
+# (one simple op) and written with one put per change.
+def blob_base() -> str:
+    base = os.environ.get("BLOB_BASE_URL", "").strip().rstrip("/")
+    if base:
+        return base
+    parts = os.environ.get("BLOB_READ_WRITE_TOKEN", "").split("_")
+    if len(parts) >= 5 and parts[0] == "vercel" and parts[1] == "blob":
+        return f"https://{parts[3].lower()}.public.blob.vercel-storage.com"
+    raise ApiError("cannot work out the Blob store URL; set BLOB_BASE_URL or connect a Blob store", 500)
 
 
-def blob_delete(urls: list[str]) -> None:
-    if urls:
-        http("POST", f"{BLOB}/delete", {"urls": urls}, blob_headers())
-
-
-def blob_read(url: str) -> bytes:
-    sep = "&" if "?" in url else "?"
-    return http("GET", f"{url}{sep}ts={int(time.time() * 1000)}", raw=True)
-
-
-def blob_read_json(url: str):
+def blob_get_json(pathname: str):
+    """Read a JSON blob by URL. Returns None when it does not exist."""
     try:
-        return json.loads(blob_read(url).decode("utf-8"))
+        raw = http("GET", f"{blob_base()}/{pathname}?ts={int(time.time() * 1000)}", raw=True)
+    except ApiError as e:
+        if "HTTP 404" in str(e):
+            return None
+        raise
+    try:
+        return json.loads(raw.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):
         return None
 
@@ -184,25 +189,37 @@ def dedupe(entries: list[dict]) -> list[dict]:
     return out
 
 
+INDEX = {"data": None, "at": 0.0}
+INDEX_TTL = 20  # seconds a warm instance trusts its copy for reads
+
+
+def index_read(force: bool = False) -> dict:
+    if not force and INDEX["data"] is not None and time.time() - INDEX["at"] < INDEX_TTL:
+        return INDEX["data"]
+    data = blob_get_json("index.json")
+    if not isinstance(data, dict):
+        legacy = blob_get_json("ledger.json")  # one-time migration from the old layout
+        data = {"ledger": legacy if isinstance(legacy, list) else []}
+    data.setdefault("ledger", [])
+    data.setdefault("tasks", {})
+    data.setdefault("refs", [])
+    data["ledger"] = dedupe(data["ledger"])
+    INDEX.update(data=data, at=time.time())
+    return data
+
+
+def index_mutate(fn) -> dict:
+    """Fresh read, apply fn(data), one put. fn may raise to abort without writing."""
+    data = index_read(force=True)
+    fn(data)
+    data["ledger"] = dedupe(data["ledger"])
+    blob_put("index.json", json.dumps(data, ensure_ascii=False).encode("utf-8"), "application/json", max_age=60)
+    INDEX.update(data=data, at=time.time())
+    return data
+
+
 def ledger_read() -> list[dict]:
-    blobs = [b for b in blob_list("ledger.json", 5) if b.get("pathname") == "ledger.json"]
-    if not blobs:
-        return []
-    data = blob_read_json(blobs[0]["url"])
-    return dedupe(data) if isinstance(data, list) else []
-
-
-def ledger_write(entries: list[dict]) -> None:
-    blob_put("ledger.json", json.dumps(dedupe(entries), ensure_ascii=False).encode("utf-8"), "application/json", max_age=60)
-
-
-def ledger_append(entry: dict) -> bool:
-    entries = ledger_read()
-    if any(e.get("task_id") == entry.get("task_id") for e in entries):
-        return False
-    entries.append(entry)
-    ledger_write(entries)
-    return True
+    return index_read()["ledger"]
 
 
 FINALIZING: set = set()  # per warm instance, blocks concurrent finalization of one task
@@ -215,17 +232,17 @@ def update_item(p: dict) -> dict:
     item_id = str(p.get("id") or "")
     if not item_id:
         raise ApiError("id is required")
-    entries = ledger_read()
-    hit = False
-    for e in entries:
-        if e.get("task_id") == item_id:
-            for k in ("rating", "note", "hidden"):
-                if k in p:
-                    e[k] = p[k]
-            hit = True
-    if not hit:
-        raise ApiError("item not found", 404)
-    ledger_write(entries)
+    def patch(d: dict) -> None:
+        hit = False
+        for e in d["ledger"]:
+            if e.get("task_id") == item_id:
+                for k in ("rating", "note", "hidden"):
+                    if k in p:
+                        e[k] = p[k]
+                hit = True
+        if not hit:
+            raise ApiError("item not found", 404)
+    index_mutate(patch)
     return {"ok": True}
 
 
@@ -257,15 +274,15 @@ def save_upload(p: dict) -> dict:
     pathname = f"{folder}/{stem}-{int(time.time()) % 100000}.{suffix}"
     ctype = "image/png" if ext == "png" else "image/jpeg"
     stored = blob_put(pathname, raw, ctype)
-    return {"ok": True, "name": pathname.rsplit("/", 1)[-1], "url": stored.get("url"), "media": inspect_bytes(raw, "image")}
+    name = pathname.rsplit("/", 1)[-1]
+    if kind == "ref":
+        rec = {"name": name, "url": stored.get("url"), "uploaded_at": now().isoformat(timespec="seconds")}
+        index_mutate(lambda d: d["refs"].insert(0, rec))
+    return {"ok": True, "name": name, "url": stored.get("url"), "media": inspect_bytes(raw, "image")}
 
 
 def list_refs() -> list[dict]:
-    out = []
-    for b in blob_list("refs/", 200):
-        out.append({"name": b.get("pathname", "").rsplit("/", 1)[-1], "url": b.get("url"), "uploaded_at": b.get("uploadedAt")})
-    out.sort(key=lambda r: r.get("uploaded_at") or "", reverse=True)
-    return out
+    return index_read()["refs"][:200]
 
 
 def spend_summary(entries: list[dict]) -> dict:
@@ -457,19 +474,19 @@ def quote(p: dict) -> dict:
     raise ApiError("kind must be image or video")
 
 
-def task_path(task_id: str) -> str:
-    return f"tasks/{task_id}.json"
+def tasks_add(new_jobs: list[dict]) -> None:
+    def add(d: dict) -> None:
+        for j in new_jobs:
+            d["tasks"][j["id"]] = j
+    index_mutate(add)
 
 
-def task_save(job: dict) -> None:
-    blob_put(task_path(job["id"]), json.dumps(job, ensure_ascii=False).encode("utf-8"), "application/json", max_age=60)
+def task_load(task_id: str) -> dict | None:
+    return index_read(force=True)["tasks"].get(task_id)
 
 
-def task_load(task_id: str) -> tuple[dict | None, str | None]:
-    for b in blob_list(task_path(task_id), 5):
-        if b.get("pathname") == task_path(task_id):
-            return blob_read_json(b["url"]), b["url"]
-    return None, None
+def task_remove(task_id: str) -> None:
+    index_mutate(lambda d: d["tasks"].pop(task_id, None))
 
 
 def generate(p: dict) -> list[dict]:
@@ -547,8 +564,8 @@ def generate(p: dict) -> list[dict]:
             "parent_id": p.get("parent_id") or None, "refs": refs or None,
             "variant": i + 1 if count > 1 else None,
         }
-        task_save(job)
         jobs.append(job)
+    tasks_add(jobs)  # one write for the whole batch
     return jobs
 
 
@@ -586,12 +603,12 @@ def finalize(p: dict) -> dict:
         "group": src.get("group"), "negative": src.get("negative"), "fields": src.get("fields"), "seed": None,
         "parent_id": draft_id, "refs": None, "variant": None,
     }
-    task_save(job)
+    tasks_add([job])
     return job
 
 
 def poll_task(task_id: str) -> dict:
-    job, url = task_load(task_id)
+    job = task_load(task_id)
     if not job:
         return {"ok": False, "gone": True, "error": "unknown or already finished task"}
     if job.get("status") != "running":
@@ -605,19 +622,17 @@ def poll_task(task_id: str) -> dict:
     if state == "fail":
         job.update(status="failed", kie_state="fail", finished_at=time.time(),
                    result={"ok": False, "error": f"kie.ai task failed ({d.get('failCode')}): {d.get('failMsg')}. Failed tasks are not billed."})
-        blob_delete([url])
+        task_remove(task_id)
         return {"ok": True, "job": job}
 
-    # success: guard against two pollers finalizing at once (in-memory for a warm instance, blob flag otherwise)
+    # success: guard against two pollers finalizing at once (in-memory for a warm instance, index flag otherwise)
     if task_id in FINALIZING or (job.get("finalizing_at") and time.time() - job["finalizing_at"] < 300):
         job["kie_state"] = "saving"
         return {"ok": True, "job": job}
-    if any(e.get("task_id") == task_id for e in ledger_read()):
-        blob_delete([url])
+    if any(e.get("task_id") == task_id for e in index_read()["ledger"]):
+        task_remove(task_id)
         return {"ok": False, "gone": True, "error": "already saved"}
-    FINALIZING.add(task_id)
-    job["finalizing_at"] = time.time()
-    task_save(job)
+    FINALIZING.add(task_id)  # the ledger dedupe below makes a rare double save harmless
 
     res = d.get("response")
     if not res:
@@ -654,9 +669,12 @@ def poll_task(task_id: str) -> dict:
     }
     for k in ("group", "negative", "fields", "seed", "parent_id", "refs", "variant"):
         entry[k] = job.get(k)
+    def save(d: dict) -> None:
+        if not any(e.get("task_id") == task_id for e in d["ledger"]):
+            d["ledger"].append(entry)
+        d["tasks"].pop(task_id, None)
     try:
-        ledger_append(entry)
-        blob_delete([url])
+        index_mutate(save)  # ledger row and task removal in one write
     finally:
         FINALIZING.discard(task_id)
     job.update(status="done", kie_state="success", finished_at=time.time(),
@@ -670,13 +688,14 @@ def state() -> dict:
     entries: list[dict] = []
     jobs: list[dict] = []
     try:
-        entries = ledger_read()
-        for b in blob_list("tasks/", 100):
-            j = blob_read_json(b["url"])
-            if isinstance(j, dict) and j.get("status") == "running":
-                jobs.append(j)
+        idx = index_read()
+        entries = idx["ledger"]
+        jobs = [j for j in idx["tasks"].values() if isinstance(j, dict) and j.get("status") == "running"]
     except ApiError as e:
         setup_error = str(e)
+        if "blocked" in setup_error.lower() or "HTTP 403" in setup_error:
+            setup_error = ("Vercel has blocked the Blob store because the free plan's monthly operation limit was "
+                           "used up. History and saving are paused until the limit resets or the plan is upgraded.")
     gens = []
     for e in reversed(entries):
         if e.get("url"):
