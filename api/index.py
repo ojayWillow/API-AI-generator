@@ -12,7 +12,7 @@ Environment variables (Vercel project settings):
   MONTHLY_CAP_USD         default 50
 
 Routes (vercel.json rewrites /api/<op> to this file with ?op=<op>):
-  GET  state | tasks?id=   POST quote | generate | refresh-credits
+  GET  state | tasks?id=   POST quote | generate | item | upload | refresh-credits
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler
 
 KIE = "https://api.kie.ai"
@@ -171,10 +172,74 @@ def ledger_read() -> list[dict]:
     return data if isinstance(data, list) else []
 
 
+def ledger_write(entries: list[dict]) -> None:
+    blob_put("ledger.json", json.dumps(entries, ensure_ascii=False).encode("utf-8"), "application/json", max_age=60)
+
+
 def ledger_append(entry: dict) -> None:
     entries = ledger_read()
     entries.append(entry)
-    blob_put("ledger.json", json.dumps(entries, ensure_ascii=False).encode("utf-8"), "application/json", max_age=60)
+    ledger_write(entries)
+
+
+EXTRA_KEYS = ("group", "negative", "fields", "seed", "parent_id", "refs", "rating", "note", "hidden", "variant")
+
+
+def update_item(p: dict) -> dict:
+    item_id = str(p.get("id") or "")
+    if not item_id:
+        raise ApiError("id is required")
+    entries = ledger_read()
+    hit = False
+    for e in entries:
+        if e.get("task_id") == item_id:
+            for k in ("rating", "note", "hidden"):
+                if k in p:
+                    e[k] = p[k]
+            hit = True
+    if not hit:
+        raise ApiError("item not found", 404)
+    ledger_write(entries)
+    return {"ok": True}
+
+
+def safe_name(name: str, default_ext: str) -> str:
+    base = re.sub(r"[^A-Za-z0-9._-]+", "-", (name or "").strip()).strip("-.") or "upload"
+    if "." not in base:
+        base += "." + default_ext
+    return base[:80]
+
+
+def save_upload(p: dict) -> dict:
+    import base64
+    data = p.get("data") or ""
+    if "," in data and data.strip().startswith("data:"):
+        data = data.split(",", 1)[1]
+    try:
+        raw = base64.b64decode(data, validate=False)
+    except Exception:  # noqa: BLE001
+        raise ApiError("upload data must be base64")
+    if not raw:
+        raise ApiError("empty upload")
+    if len(raw) > 4 * 1024 * 1024:
+        raise ApiError("upload larger than 4 MB; the page should downscale it first")
+    ext = "png" if raw[:8] == b"\x89PNG\r\n\x1a\n" else "jpg" if raw[:2] == b"\xff\xd8" else "png"
+    name = safe_name(p.get("name") or "", ext)
+    kind = p.get("kind") or "ref"
+    folder = "refs" if kind == "ref" else "generations"
+    stem, suffix = name.rsplit(".", 1)
+    pathname = f"{folder}/{stem}-{int(time.time()) % 100000}.{suffix}"
+    ctype = "image/png" if ext == "png" else "image/jpeg"
+    stored = blob_put(pathname, raw, ctype)
+    return {"ok": True, "name": pathname.rsplit("/", 1)[-1], "url": stored.get("url"), "media": inspect_bytes(raw, "image")}
+
+
+def list_refs() -> list[dict]:
+    out = []
+    for b in blob_list("refs/", 200):
+        out.append({"name": b.get("pathname", "").rsplit("/", 1)[-1], "url": b.get("url"), "uploaded_at": b.get("uploadedAt")})
+    out.sort(key=lambda r: r.get("uploaded_at") or "", reverse=True)
+    return out
 
 
 def spend_summary(entries: list[dict]) -> dict:
@@ -361,16 +426,24 @@ def task_load(task_id: str) -> tuple[dict | None, str | None]:
     return None, None
 
 
-def generate(p: dict) -> dict:
+def generate(p: dict) -> list[dict]:
     prompt = (p.get("prompt") or "").strip()
+    negative = (p.get("negative") or "").strip()
     if not prompt:
         raise ApiError("prompt is required")
     q = quote(p)
+    count = max(1, min(4, int(p.get("count") or 1))) if q["kind"] == "image" else 1
     entries = ledger_read()
     if q["kind"] == "video" and not p.get("approve"):
         raise ApiError("Paid video run needs approval. Tick 'I approve this paid run' and generate again.",
                        200, approval_required=True, quote=q, spend=spend_summary(entries))
-    enforce_caps(entries, q["usd_est"], bool(p.get("override_cap")))
+    enforce_caps(entries, q["usd_est"] * count, bool(p.get("override_cap")))
+    group = p.get("group") or uuid.uuid4().hex[:8]
+    full_prompt = f"{prompt}. Avoid: {negative}" if negative else prompt
+    try:
+        seed = int(p.get("seed")) if p.get("seed") not in (None, "", -1, "-1") else -1
+    except (TypeError, ValueError):
+        seed = -1
 
     if q["kind"] == "image":
         refs = [str(r).strip() for r in (p.get("refs") or []) if str(r).strip()]
@@ -379,38 +452,52 @@ def generate(p: dict) -> dict:
                 raise ApiError("reference images must be public URLs on the hosted dashboard")
         aspect = p.get("aspect") or "9:16"
         if q["model"] == "nano-banana-2":
-            inp = {"prompt": prompt, "image_input": refs, "aspect_ratio": aspect,
+            inp = {"prompt": full_prompt, "image_input": refs, "aspect_ratio": aspect,
                    "resolution": q["resolution"], "output_format": "png"}
         else:
-            inp = {"prompt": prompt, "aspect_ratio": aspect, "resolution": q["resolution"]}
+            inp = {"prompt": full_prompt, "aspect_ratio": aspect, "resolution": q["resolution"]}
         params = {"aspect_ratio": aspect, "resolution": q["resolution"], "refs": refs}
         input_image = None
     else:
+        refs = []
         image = (p.get("image") or "").strip()
         if not re.match(r"^https?://", image):
             raise ApiError("source still must be a public URL; click Animate on a gallery image")
         if q["model"] == "2.5":
-            inp = {"prompt": prompt, "first_frame_url": image, "aspect_ratio": "adaptive",
+            inp = {"prompt": full_prompt, "first_frame_url": image, "aspect_ratio": "adaptive",
                    "duration": q["duration_s"], "resolution": "1080p"}
         else:
-            inp = {"prompt": prompt, "image_url": image, "resolution": "1080p", "duration": str(q["duration_s"]),
-                   "camera_fixed": bool(p.get("camera_fixed")), "seed": -1}
-        params = {"duration_s": q["duration_s"], "resolution": "1080p", "camera_fixed": bool(p.get("camera_fixed"))}
+            inp = {"prompt": full_prompt, "image_url": image, "resolution": "1080p", "duration": str(q["duration_s"]),
+                   "camera_fixed": bool(p.get("camera_fixed")), "seed": seed}
+        params = {"duration_s": q["duration_s"], "resolution": "1080p", "camera_fixed": bool(p.get("camera_fixed")),
+                  "seed": seed}
         input_image = image
 
-    r = kie("POST", "/api/v1/jobs/createTask", {"model": q["model_id"], "input": inp})
-    task_id = (r.get("data") or {}).get("taskId")
-    if r.get("code") != 200 or not task_id:
-        raise ApiError(f"kie.ai createTask failed: {r.get('msg') or r}", 502)
-    job = {
-        "id": task_id, "kind": q["kind"], "model": q["model"], "model_id": q["model_id"], "prompt": prompt,
-        "params": params, "name": slugify(p.get("name") or prompt), "preset": p.get("preset") or None,
-        "input_image": input_image, "credits_est": q["credits_est"], "usd_est": q["usd_est"],
-        "status": "running", "kie_state": "submitted", "started_at": time.time(),
-        "created_at": now().isoformat(timespec="seconds"), "result": None,
-    }
-    task_save(job)
-    return job
+    jobs = []
+    for i in range(count):
+        r = kie("POST", "/api/v1/jobs/createTask", {"model": q["model_id"], "input": inp})
+        task_id = (r.get("data") or {}).get("taskId")
+        if r.get("code") != 200 or not task_id:
+            if jobs:
+                break  # keep the ones that were accepted
+            raise ApiError(f"kie.ai createTask failed: {r.get('msg') or r}", 502)
+        name = slugify(p.get("name") or prompt)
+        if count > 1:
+            name = f"{name}-v{i + 1}"
+        job = {
+            "id": task_id, "kind": q["kind"], "model": q["model"], "model_id": q["model_id"], "prompt": prompt,
+            "params": params, "name": name, "preset": p.get("preset") or None,
+            "input_image": input_image, "credits_est": q["credits_est"], "usd_est": q["usd_est"],
+            "status": "running", "kie_state": "submitted", "started_at": time.time(),
+            "created_at": now().isoformat(timespec="seconds"), "result": None,
+            "group": group, "negative": negative or None, "fields": p.get("fields") or None,
+            "seed": seed if (q["kind"] == "video" and seed != -1) else None,
+            "parent_id": p.get("parent_id") or None, "refs": refs or None,
+            "variant": i + 1 if count > 1 else None,
+        }
+        task_save(job)
+        jobs.append(job)
+    return jobs
 
 
 def poll_task(task_id: str) -> dict:
@@ -465,7 +552,10 @@ def poll_task(task_id: str) -> dict:
         "name": pathname.rsplit("/", 1)[-1], "file": pathname, "url": stored.get("url"), "source_url": src,
         "credits_est": job["credits_est"], "credits_consumed": consumed, "usd": round(credits * USD_PER_CREDIT, 4),
         "preset": job.get("preset"), "input_image": job.get("input_image"), "media": media,
+        "rating": None, "note": None, "hidden": False,
     }
+    for k in ("group", "negative", "fields", "seed", "parent_id", "refs", "variant"):
+        entry[k] = job.get(k)
     ledger_append(entry)
     blob_delete([url])
     job.update(status="done", kie_state="success", finished_at=time.time(),
@@ -489,17 +579,26 @@ def state() -> dict:
     gens = []
     for e in reversed(entries):
         if e.get("url"):
-            gens.append({"name": e.get("name"), "url": e["url"], "kind": e.get("kind"), "prompt": e.get("prompt"),
-                         "model": e.get("model"), "model_id": e.get("model_id"), "usd": e.get("usd"),
-                         "credits_consumed": e.get("credits_consumed"), "created_at": e.get("created_at"),
-                         "params": e.get("params"), "preset": e.get("preset"), "input_image": e.get("input_image"),
-                         "task_id": e.get("task_id"), "media": e.get("media")})
+            item = {"id": e.get("task_id"), "name": e.get("name"), "url": e["url"], "kind": e.get("kind"),
+                    "prompt": e.get("prompt"), "model": e.get("model"), "model_id": e.get("model_id"),
+                    "usd": e.get("usd"), "credits_consumed": e.get("credits_consumed"),
+                    "created_at": e.get("created_at"), "params": e.get("params"), "preset": e.get("preset"),
+                    "input_image": e.get("input_image"), "task_id": e.get("task_id"), "media": e.get("media")}
+            for k in EXTRA_KEYS:
+                item[k] = e.get(k)
+            gens.append(item)
+    refs: list[dict] = []
+    if not setup_error:
+        try:
+            refs = list_refs()
+        except ApiError:
+            refs = []
     return {
         "ok": True, "mode": "vercel", "now": now().isoformat(timespec="seconds"),
         "key_present": key_present(), "setup_error": setup_error,
         "credits": kie_credits() if key_present() else {"value": None, "usd": None, "error": "KIE_API_KEY is not set"},
         "usd_per_credit": USD_PER_CREDIT, "spend": spend_summary(entries), "daily": daily_spend(entries),
-        "generations": gens, "pricing": PRICING, "jobs": jobs,
+        "generations": gens, "refs": refs, "pricing": PRICING, "jobs": jobs,
     }
 
 
@@ -557,9 +656,23 @@ class handler(BaseHTTPRequestHandler):
         op, _ = self._op()
         body = self._body()
         if op == "quote":
-            return self._run(lambda: {"ok": True, **quote(body), "spend": spend_summary(ledger_read())})
+            def _quote():
+                q = quote(body)
+                count = max(1, min(4, int(body.get("count") or 1))) if q["kind"] == "image" else 1
+                if count > 1:
+                    q.update(count=count, credits_est_total=q["credits_est"] * count,
+                             usd_est_total=round(q["usd_est"] * count, 4))
+                return {"ok": True, **q, "spend": spend_summary(ledger_read())}
+            return self._run(_quote)
         if op == "generate":
-            return self._run(lambda: {"ok": True, "job": generate(body)})
+            def _gen():
+                jobs = generate(body)
+                return {"ok": True, "jobs": jobs, "job": jobs[0]}
+            return self._run(_gen)
+        if op == "item":
+            return self._run(lambda: update_item(body))
+        if op == "upload":
+            return self._run(lambda: save_upload(body))
         if op == "refresh-credits":
             return self._run(lambda: {"ok": True, "credits": kie_credits()})
         self._send({"ok": False, "error": f"unknown operation '{op}'"}, 404)

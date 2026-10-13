@@ -9,17 +9,20 @@ wraps kie.py. Standard library only. Binds to localhost only. The same page and
 API contract are served on Vercel by api/index.py.
 
 API
-  GET  /api/state            credits, spend, caps, daily spend, generations, jobs
+  GET  /api/state            credits, spend, caps, daily spend, generations, refs, jobs
   POST /api/refresh-credits  force a credit re-check
   POST /api/quote            {kind, model, duration, resolution}
-  POST /api/generate         {kind, prompt, model, ...}  -> starts a job
+  POST /api/generate         {kind, prompt, model, count, ...}  -> starts 1..4 jobs
   GET  /api/tasks?id=<job>   one job's status
+  POST /api/item             {id, rating, note, hidden}  -> review metadata
+  POST /api/upload           {name, data (base64), kind: ref|still} -> saves a file
   GET  /media/<file>         serves a file from the generations folder
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime as dt
 import json
 import mimetypes
@@ -29,11 +32,11 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import urllib.parse
 from urllib.parse import quote, unquote, urlparse
 
 HERE = Path(__file__).resolve().parent
@@ -42,6 +45,7 @@ import kie  # noqa: E402  (sibling module)
 
 MEDIA_EXT = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".mov", ".webm"}
 VIDEO_EXT = {".mp4", ".mov", ".webm"}
+EXTRA_KEYS = ("group", "negative", "fields", "seed", "parent_id", "refs", "rating", "note", "hidden", "variant")
 
 JOBS: dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
@@ -97,19 +101,32 @@ def refresh_credits(force: bool = False) -> None:
 def daily_spend() -> list[dict]:
     now = dt.datetime.now().astimezone()
     month = now.strftime("%Y-%m")
-    days = {}
+    days: dict[str, dict] = {}
     for e in kie.read_ledger():
         ts = e.get("created_at", "")
         if ts.startswith(month):
-            d = ts[:10]
-            days.setdefault(d, {"usd": 0.0, "runs": 0})
-            days[d]["usd"] += float(e.get("usd", 0) or 0)
-            days[d]["runs"] += 1
+            d = days.setdefault(ts[:10], {"usd": 0.0, "runs": 0})
+            d["usd"] += float(e.get("usd", 0) or 0)
+            d["runs"] += 1
     out = []
     for day in range(1, now.day + 1):
         key = f"{month}-{day:02d}"
         v = days.get(key, {"usd": 0.0, "runs": 0})
         out.append({"date": key, "usd": round(v["usd"], 4), "runs": v["runs"]})
+    return out
+
+
+def refs_dir() -> Path:
+    d = kie.gen_dir() / "refs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def list_refs() -> list[dict]:
+    out = []
+    for p in sorted(refs_dir().iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        if p.is_file() and p.suffix.lower() in MEDIA_EXT and p.suffix.lower() not in VIDEO_EXT:
+            out.append({"name": p.name, "path": str(p), "url": "/media/refs/" + quote(p.name)})
     return out
 
 
@@ -127,7 +144,8 @@ def list_generations() -> list[dict]:
             except json.JSONDecodeError:
                 meta = {}
         st = p.stat()
-        items.append({
+        item = {
+            "id": meta.get("task_id") or p.name,
             "name": p.name,
             "path": str(p),
             "url": "/media/" + quote(p.name),
@@ -145,7 +163,10 @@ def list_generations() -> list[dict]:
             "input_image": meta.get("input_image"),
             "task_id": meta.get("task_id"),
             "media": meta.get("media"),
-        })
+        }
+        for k in EXTRA_KEYS:
+            item[k] = meta.get(k)
+        items.append(item)
     return items
 
 
@@ -165,9 +186,86 @@ def state() -> dict:
         "daily": daily_spend(),
         "generations_dir": str(kie.gen_dir()),
         "generations": list_generations(),
+        "refs": list_refs(),
         "pricing": {"image": pricing.get("image", {}), "video": pricing.get("video", {})},
         "jobs": jobs,
     }
+
+
+# ---------------------------------------------------------------------------
+# review metadata and uploads
+# ---------------------------------------------------------------------------
+def find_sidecar(item_id: str) -> Path | None:
+    d = kie.gen_dir()
+    direct = d / item_id
+    if direct.exists() and direct.with_suffix(direct.suffix + ".json").exists():
+        return direct.with_suffix(direct.suffix + ".json")
+    for side in d.glob("*.json"):
+        if side.name == "ledger.json":
+            continue
+        try:
+            meta = json.loads(side.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if meta.get("task_id") == item_id:
+            return side
+    return None
+
+
+def apply_extras(item_id: str, extras: dict) -> bool:
+    """Merge extra keys into an item's sidecar and its ledger entry."""
+    extras = {k: v for k, v in extras.items() if k in EXTRA_KEYS}
+    side = find_sidecar(item_id)
+    if side:
+        try:
+            meta = json.loads(side.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            meta = {}
+        meta.update(extras)
+        side.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+    entries = kie.read_ledger()
+    hit = False
+    for e in entries:
+        if e.get("task_id") == item_id:
+            e.update(extras)
+            hit = True
+    if hit:
+        kie.ledger_path().write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
+    return bool(side or hit)
+
+
+def safe_name(name: str, default_ext: str) -> str:
+    base = re.sub(r"[^A-Za-z0-9._-]+", "-", (name or "").strip()).strip("-.") or "upload"
+    if "." not in base:
+        base += "." + default_ext
+    return base[:80]
+
+
+def save_upload(p: dict) -> dict:
+    data = p.get("data") or ""
+    if "," in data and data.strip().startswith("data:"):
+        data = data.split(",", 1)[1]
+    try:
+        raw = base64.b64decode(data, validate=False)
+    except Exception:  # noqa: BLE001
+        raise ValueError("upload data must be base64")
+    if not raw:
+        raise ValueError("empty upload")
+    if len(raw) > 25 * 1024 * 1024:
+        raise ValueError("upload larger than 25 MB")
+    ext = "png" if raw[:8] == b"\x89PNG\r\n\x1a\n" else "jpg" if raw[:2] == b"\xff\xd8" else "png"
+    name = safe_name(p.get("name") or "", ext)
+    kind = p.get("kind") or "ref"
+    dest_dir = refs_dir() if kind == "ref" else kie.gen_dir()
+    dest = dest_dir / name
+    i = 1
+    while dest.exists():
+        dest = dest_dir / f"{Path(name).stem}-{i}{Path(name).suffix}"
+        i += 1
+    dest.write_bytes(raw)
+    rel = f"refs/{dest.name}" if kind == "ref" else dest.name
+    info = kie.inspect_file(dest)
+    return {"ok": True, "name": dest.name, "path": str(dest), "url": "/media/" + quote(rel), "media": info}
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +273,8 @@ def state() -> dict:
 # ---------------------------------------------------------------------------
 def resolve_image(ref: str) -> str:
     ref = ref.strip()
+    if ref.startswith("/media/"):
+        ref = unquote(ref[len("/media/"):])
     if re.match(r"^https?://", ref) or Path(ref).is_absolute():
         return ref
     candidate = kie.gen_dir() / ref
@@ -184,10 +284,13 @@ def resolve_image(ref: str) -> str:
 def build_args(p: dict) -> list[str]:
     kind = p.get("kind")
     prompt = (p.get("prompt") or "").strip()
+    negative = (p.get("negative") or "").strip()
     if kind not in ("image", "video"):
         raise ValueError("kind must be image or video")
     if not prompt:
         raise ValueError("prompt is required")
+    if negative:
+        prompt = f"{prompt}. Avoid: {negative}"
     args = [kind, "--prompt", prompt]
     if kind == "image":
         for k, flag in (("model", "--model"), ("aspect", "--aspect"), ("resolution", "--resolution"),
@@ -196,7 +299,7 @@ def build_args(p: dict) -> list[str]:
                 args += [flag, str(p[k])]
         for r in p.get("refs") or []:
             if str(r).strip():
-                args += ["--ref", str(r).strip()]
+                args += ["--ref", resolve_image(str(r))]
     else:
         if not (p.get("image") or "").strip():
             raise ValueError("a source still is required for video")
@@ -204,6 +307,8 @@ def build_args(p: dict) -> list[str]:
         for k, flag in (("model", "--model"), ("duration", "--duration"), ("name", "--name"), ("preset", "--preset")):
             if p.get(k):
                 args += [flag, str(p[k])]
+        if p.get("seed") not in (None, "", -1, "-1"):
+            args += ["--seed", str(int(p["seed"]))]
         if p.get("camera_fixed"):
             args.append("--camera-fixed")
         if p.get("approve"):
@@ -213,32 +318,51 @@ def build_args(p: dict) -> list[str]:
     return args
 
 
-def start_job(p: dict) -> dict:
-    args = build_args(p)
-    job = {
-        "id": uuid.uuid4().hex[:8], "kind": p["kind"], "model": p.get("model"),
-        "prompt": p["prompt"].strip(), "status": "running", "kie_state": "running",
-        "started_at": time.time(), "finished_at": None, "result": None, "log": "",
-    }
-    with JOBS_LOCK:
-        JOBS[job["id"]] = job
+def start_jobs(p: dict) -> list[dict]:
+    count = max(1, min(4, int(p.get("count") or 1))) if p.get("kind") == "image" else 1
+    group = p.get("group") or uuid.uuid4().hex[:8]
+    jobs = []
+    for i in range(count):
+        q = dict(p)
+        if count > 1 and p.get("name"):
+            q["name"] = f"{p['name']}-v{i + 1}"
+        args = build_args(q)
+        extras = {
+            "group": group, "negative": (p.get("negative") or "").strip() or None,
+            "fields": p.get("fields") or None, "parent_id": p.get("parent_id") or None,
+            "refs": [str(r) for r in (p.get("refs") or []) if str(r).strip()] or None,
+            "variant": i + 1 if count > 1 else None, "rating": None, "note": None, "hidden": False,
+        }
+        if p.get("kind") == "video" and p.get("seed") not in (None, "", -1, "-1"):
+            extras["seed"] = int(p["seed"])
+        job = {
+            "id": uuid.uuid4().hex[:8], "kind": p["kind"], "model": p.get("model"),
+            "prompt": (p.get("prompt") or "").strip(), "status": "running", "kie_state": "running",
+            "started_at": time.time(), "finished_at": None, "result": None, "log": "", "group": group,
+        }
+        with JOBS_LOCK:
+            JOBS[job["id"]] = job
+        jobs.append(job)
 
-    def worker() -> None:
-        try:
-            code, data, err = run_kie(args)
-            job["result"] = data
-            job["log"] = err[-4000:]
-            job["status"] = {0: "done", 2: "approval_required", 3: "cap_exceeded"}.get(code, "failed")
-        except subprocess.TimeoutExpired:
-            job["status"], job["result"] = "failed", {"ok": False, "error": "timed out"}
-        except Exception as e:  # noqa: BLE001
-            job["status"], job["result"] = "failed", {"ok": False, "error": str(e)}
-        finally:
-            job["finished_at"] = time.time()
-            CREDITS["checked_at"] = 0  # force a refresh after spend
+        def worker(job=job, args=args, extras=extras) -> None:
+            try:
+                code, data, err = run_kie(args)
+                job["result"] = data
+                job["log"] = err[-4000:]
+                job["status"] = {0: "done", 2: "approval_required", 3: "cap_exceeded"}.get(code, "failed")
+                if code == 0 and data.get("task_id"):
+                    apply_extras(data["task_id"], extras)
+                    job["item_id"] = data["task_id"]
+            except subprocess.TimeoutExpired:
+                job["status"], job["result"] = "failed", {"ok": False, "error": "timed out"}
+            except Exception as e:  # noqa: BLE001
+                job["status"], job["result"] = "failed", {"ok": False, "error": str(e)}
+            finally:
+                job["finished_at"] = time.time()
+                CREDITS["checked_at"] = 0
 
-    threading.Thread(target=worker, daemon=True).start()
-    return job
+        threading.Thread(target=worker, daemon=True).start()
+    return jobs
 
 
 def quote_cost(p: dict) -> dict:
@@ -251,6 +375,11 @@ def quote_cost(p: dict) -> dict:
     if kind == "image" and p.get("resolution"):
         args += ["--resolution", str(p["resolution"])]
     _, data, _ = run_kie(args, timeout=60)
+    count = max(1, min(4, int(p.get("count") or 1))) if kind == "image" else 1
+    if data.get("ok") and count > 1:
+        data["count"] = count
+        data["credits_est_total"] = data["credits_est"] * count
+        data["usd_est_total"] = round(data["usd_est"] * count, 4)
     return data
 
 
@@ -258,7 +387,7 @@ def quote_cost(p: dict) -> dict:
 # http
 # ---------------------------------------------------------------------------
 class Handler(BaseHTTPRequestHandler):
-    server_version = "generate-dashboard/1.0"
+    server_version = "generate-dashboard/1.1"
 
     def log_message(self, fmt, *args):  # quiet
         if args and str(args[1]).startswith(("4", "5")):
@@ -285,6 +414,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path in ("/", "/index.html"):
             return self._file(HERE.parent / "public" / "index.html", "text/html; charset=utf-8")
+        if path == "/presets.json":
+            return self._file(HERE.parent / "public" / "presets.json", "application/json; charset=utf-8")
         if path == "/api/state":
             return self._json(state())
         if path == "/api/tasks":
@@ -312,8 +443,13 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/quote":
                 return self._json(quote_cost(body))
             if path == "/api/generate":
-                job = start_job(body)
-                return self._json({"ok": True, "job": job})
+                jobs = start_jobs(body)
+                return self._json({"ok": True, "jobs": jobs, "job": jobs[0]})
+            if path == "/api/item":
+                ok = apply_extras(str(body.get("id") or ""), body)
+                return self._json({"ok": ok, "error": None if ok else "item not found"}, 200 if ok else 404)
+            if path == "/api/upload":
+                return self._json(save_upload(body))
         except ValueError as e:
             return self._json({"ok": False, "error": str(e)}, 400)
         self._json({"ok": False, "error": "not found"}, 404)
@@ -339,6 +475,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(206 if partial else 200)
         self.send_header("Content-Type", ctype)
         self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Length", str(end - start + 1))
         if partial:
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")

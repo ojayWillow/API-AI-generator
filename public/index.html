@@ -7,46 +7,33 @@
 <style>
   :root {
     color-scheme: light;
-    --page: #f9f9f7;
-    --surface: #fcfcfb;
-    --ink: #0b0b0b;
-    --ink-2: #52514e;
-    --muted: #898781;
-    --grid: #e1e0d9;
-    --axis: #c3c2b7;
-    --border: rgba(11,11,11,0.10);
-    --series: #2a78d6;
-    --series-track: #cde2fb;
-    --good: #0ca30c;
-    --warning: #fab219;
-    --critical: #d03b3b;
-    --good-text: #006300;
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+    --series: #2a78d6; --series-track: #cde2fb;
+    --good: #0ca30c; --warning: #fab219; --critical: #d03b3b; --good-text: #006300; --star: #eda100;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
       --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7;
       --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
-      --series: #3987e5; --series-track: #184f95; --good-text: #0ca30c;
+      --series: #3987e5; --series-track: #184f95; --good-text: #0ca30c; --star: #c98500;
     }
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
     --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
-    --series: #3987e5; --series-track: #184f95; --good-text: #0ca30c;
+    --series: #3987e5; --series-track: #184f95; --good-text: #0ca30c; --star: #c98500;
   }
 
   * { box-sizing: border-box; }
   html, body { margin: 0; }
-  body {
-    background: var(--page); color: var(--ink);
-    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
-    padding: 20px 16px 48px;
-  }
-  main { max-width: 1180px; margin: 0 auto; }
+  body { background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 20px 16px 48px; }
+  main { max-width: 1280px; margin: 0 auto; }
   h1 { font-size: 20px; margin: 0; font-weight: 600; }
   h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+  h3 { font-size: 12px; margin: 14px 0 6px; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; }
   a { color: inherit; }
   header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
   .sub { color: var(--ink-2); font-size: 13px; }
@@ -66,22 +53,23 @@
   .status.warn::before { background: var(--warning); }
   .status.over::before { background: var(--critical); }
   .two { grid-template-columns: 3fr 2fr; margin-bottom: 12px; }
-  @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+  .cols { grid-template-columns: 3fr 2fr; }
+  @media (max-width: 900px) { .two, .cols { grid-template-columns: 1fr; } }
 
   .banner { border-left: 3px solid var(--warning); padding: 10px 14px; margin-bottom: 12px; }
   .banner code { background: var(--page); padding: 1px 5px; border-radius: 4px; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--page); padding: 9px 14px; border-radius: 8px; font-size: 13px; z-index: 50; display: none; max-width: 90vw; }
 
   .chart-wrap { position: relative; }
-  .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   svg text { font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--muted); }
   svg .lbl { fill: var(--ink-2); font-weight: 600; }
   svg .grid { stroke: var(--grid); stroke-width: 1; }
   svg .base { stroke: var(--axis); stroke-width: 1; }
   svg .bar { fill: var(--series); pointer-events: none; }
-  svg .hit { fill: transparent; cursor: default; }
+  svg .hit { fill: transparent; }
   svg .hit:hover { fill: var(--grid); opacity: .5; }
-  .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
-         border-radius: 6px; padding: 6px 9px; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.12); display: none; z-index: 5; }
+  .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.12); display: none; z-index: 5; }
   .tip b { display: block; color: var(--ink); }
   .tip span { color: var(--ink-2); }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
@@ -89,27 +77,43 @@
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .linkbtn { background: none; border: none; color: var(--ink-2); text-decoration: underline; cursor: pointer; font: inherit; font-size: 12px; padding: 0; }
 
-  form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-  form .row.one { grid-template-columns: 1fr; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .row.one { grid-template-columns: 1fr; }
+  .row.three { grid-template-columns: 1fr 1fr 1fr; }
   label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 3px; }
-  input[type=text], input[type=number], select, textarea {
-    width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
-    background: var(--page); color: var(--ink); font: inherit;
+  input[type=text], input[type=number], input[type=search], select, textarea {
+    width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--page); color: var(--ink); font: inherit;
   }
-  textarea { min-height: 72px; resize: vertical; }
-  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
-  .seg button { background: none; border: none; padding: 6px 14px; color: var(--ink-2); cursor: pointer; font: inherit; }
+  textarea { min-height: 60px; resize: vertical; }
+  textarea.final { min-height: 86px; font-size: 13px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button { background: none; border: none; padding: 6px 12px; color: var(--ink-2); cursor: pointer; font: inherit; }
   .seg button.on { background: var(--series); color: #fff; }
-  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
   button.primary { background: var(--series); color: #fff; border: none; border-radius: 6px; padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
   button.primary:disabled { opacity: .45; cursor: not-allowed; }
-  button.ghost, a.ghost { background: none; border: 1px solid var(--border); color: var(--ink); border-radius: 6px; padding: 7px 12px; font: inherit; cursor: pointer; text-decoration: none; }
+  button.ghost, a.ghost, label.ghost { background: none; border: 1px solid var(--border); color: var(--ink); border-radius: 6px; padding: 7px 12px; font: inherit; cursor: pointer; text-decoration: none; display: inline-block; }
+  button.ghost.on { border-color: var(--series); color: var(--series); }
+  button.ghost.small, a.ghost.small { font-size: 12px; padding: 4px 9px; }
   .check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
   .quote { font-size: 13px; color: var(--ink-2); margin-top: 8px; min-height: 18px; }
   .quote b { color: var(--ink); }
   .hidden { display: none !important; }
+  .create-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .create-head select { width: auto; min-width: 220px; }
+  .preset-frag { font-size: 12px; color: var(--muted); margin: -4px 0 10px; }
+  .source { display: flex; gap: 10px; align-items: center; border: 1px dashed var(--border); border-radius: 8px; padding: 8px; margin-bottom: 10px; min-height: 64px; }
+  .source img { width: 44px; height: 60px; object-fit: cover; border-radius: 4px; background: var(--page); }
+  .source .muted { color: var(--muted); font-size: 12px; }
+  .refs { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+  .ref { position: relative; width: 64px; height: 64px; border-radius: 6px; overflow: hidden; border: 2px solid transparent; cursor: pointer; background: var(--page); }
+  .ref img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .ref.on { border-color: var(--series); }
+  .ref .x { position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,.55); color: #fff; border: none; border-radius: 4px; font-size: 11px; width: 18px; height: 18px; cursor: pointer; display: none; }
+  .ref:hover .x { display: block; }
+  .ref.add { display: flex; align-items: center; justify-content: center; border: 1px dashed var(--border); color: var(--ink-2); font-size: 22px; }
 
-  .jobs { display: grid; gap: 8px; }
+  .jobs { display: grid; gap: 8px; max-height: 260px; overflow: auto; }
   .job { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; }
   .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border); color: var(--ink-2); white-space: nowrap; }
   .pill.running { border-color: var(--series); color: var(--series); }
@@ -118,138 +122,174 @@
   .pill.approval_required { border-color: var(--warning); }
   .job .msg { color: var(--ink-2); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 
-  .gallery { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
-  .item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
-  .item .media { background: var(--page); aspect-ratio: 9 / 12; display: flex; align-items: center; justify-content: center; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .toolbar input[type=search] { width: 220px; }
+  .board { display: grid; gap: 12px; }
+  .set { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface); }
+  .set .set-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--ink-2); }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; position: relative; }
+  .item.starred { border-color: var(--star); }
+  .item.rejected { opacity: .55; }
+  .item.cmp { outline: 2px solid var(--series); }
+  .item .media { background: var(--page); aspect-ratio: 9 / 12; display: flex; align-items: center; justify-content: center; cursor: zoom-in; }
   .item img, .item video { width: 100%; height: 100%; object-fit: contain; display: block; }
   .item .body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
   .item .prompt { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .item .meta { color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
-  .item .btns { display: flex; gap: 6px; margin-top: 2px; flex-wrap: wrap; }
-  .item .btns button, .item .btns a { font-size: 12px; padding: 4px 9px; }
+  .item .note { color: var(--ink-2); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .btns { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+  .item .btns button, .item .btns a { font-size: 11px; padding: 3px 7px; }
+  .item .btns button.star.on { border-color: var(--star); color: var(--star); }
+  .item .btns button.rej.on { border-color: var(--critical); color: var(--critical); }
+  .badge { position: absolute; top: 6px; left: 6px; font-size: 11px; background: rgba(0,0,0,.6); color: #fff; padding: 2px 6px; border-radius: 4px; }
   .empty { color: var(--muted); padding: 24px; text-align: center; }
-  .filters { display: flex; gap: 6px; margin-bottom: 10px; }
-  .filters button { font-size: 12px; padding: 4px 10px; }
-  .filters button.on { border-color: var(--series); color: var(--series); }
+
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; align-items: center; justify-content: center; z-index: 40; padding: 20px; }
+  .modal.on { display: flex; }
+  .modal .box { background: var(--surface); border-radius: 10px; padding: 14px; max-width: 1200px; width: 100%; max-height: 95vh; overflow: auto; }
+  .modal .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .modal .pair.single { grid-template-columns: 1fr; }
+  .modal .pair img, .modal .pair video { width: 100%; max-height: 72vh; object-fit: contain; background: var(--page); border-radius: 6px; }
+  .modal .cap { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+  .modal .close { float: right; }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <div>
-      <h1>Generate dashboard</h1>
-      <div class="sub" id="dir"></div>
-    </div>
+    <div><h1>Generate dashboard</h1><div class="sub" id="dir"></div></div>
     <div class="sub" id="updated"></div>
   </header>
 
   <div id="banner" class="card banner hidden"></div>
-
   <section class="grid tiles" id="tiles"></section>
 
   <section class="grid two">
     <div class="card chart-wrap">
-      <div class="chart-head">
-        <h2>Spend this month, per day</h2>
-        <button class="linkbtn" id="tableToggle">Table view</button>
-      </div>
-      <div id="chart"></div>
-      <div id="chartTable" class="hidden"></div>
-      <div class="tip" id="tip"></div>
+      <div class="chart-head"><h2>Spend this month, per day</h2><button class="linkbtn" id="tableToggle">Table view</button></div>
+      <div id="chart"></div><div id="chartTable" class="hidden"></div><div class="tip" id="tip"></div>
     </div>
-
-    <div class="card">
-      <h2>New generation</h2>
-      <div class="seg">
-        <button type="button" id="kindImage" class="on">Image</button>
-        <button type="button" id="kindVideo">Video</button>
-      </div>
-      <form id="form" autocomplete="off">
-        <div class="row one">
-          <div><label for="prompt">Prompt</label><textarea id="prompt" placeholder="first-person POV ... no text, no watermark"></textarea></div>
-        </div>
-
-        <div id="imageFields">
-          <div class="row">
-            <div><label for="imgModel">Model</label>
-              <select id="imgModel"><option value="nano-banana-2">nano-banana-2 (default)</option><option value="gpt-image-2">gpt-image-2 (readable text)</option></select></div>
-            <div><label for="aspect">Aspect</label>
-              <select id="aspect"><option>9:16</option><option>16:9</option><option>1:1</option><option>4:5</option><option>auto</option></select></div>
-          </div>
-          <div class="row">
-            <div><label for="resolution">Resolution</label>
-              <select id="resolution"><option>1K</option><option>2K</option><option>4K</option></select></div>
-            <div><label for="imgName">File name (optional)</label><input type="text" id="imgName" placeholder="roman-senator"></div>
-          </div>
-          <div class="row one">
-            <div><label for="refs">Reference image URLs, one per line (nano-banana-2 only)</label><textarea id="refs" style="min-height:44px"></textarea></div>
-          </div>
-        </div>
-
-        <div id="videoFields" class="hidden">
-          <div class="row one">
-            <div><label for="still">Source still (click Animate on a gallery image, or paste a URL)</label><input type="text" id="still" list="stills" placeholder="roman-senator.png"><datalist id="stills"></datalist></div>
-          </div>
-          <div class="row">
-            <div><label for="vidModel">Model</label>
-              <select id="vidModel"><option value="pro">pro, Seedance 1.0 Pro (default)</option><option value="lite">lite, budget</option><option value="2.5">2.5, on request</option></select></div>
-            <div><label for="duration">Duration (s)</label><input type="number" id="duration" value="10" min="2" max="15" step="1"></div>
-          </div>
-          <div class="row">
-            <div><label for="vidName">File name (optional)</label><input type="text" id="vidName"></div>
-            <div style="padding-top:18px"><label class="check"><input type="checkbox" id="cameraFixed"> Camera fixed</label></div>
-          </div>
-          <div class="row one">
-            <label class="check"><input type="checkbox" id="approve"> I approve this paid run</label>
-          </div>
-        </div>
-
-        <div class="row one">
-          <div><label for="preset">Preset name (optional, recorded with the output)</label><input type="text" id="preset" placeholder="pov"></div>
-        </div>
-        <label class="check"><input type="checkbox" id="overrideCap"> Override spend cap for this run</label>
-
-        <div class="quote" id="quote"></div>
-        <div class="actions">
-          <button type="button" class="ghost" id="quoteBtn">Quote</button>
-          <button type="submit" class="primary" id="goBtn">Generate image</button>
-          <span class="sub" id="formMsg"></span>
-        </div>
-      </form>
-    </div>
+    <div class="card"><h2>Jobs</h2><div class="jobs" id="jobs"><div class="empty">Nothing running.</div></div></div>
   </section>
 
-  <section class="card" id="jobsCard" style="margin-bottom:12px">
-    <h2>Jobs</h2>
-    <div class="jobs" id="jobs"><div class="empty">Nothing running.</div></div>
+  <section class="card" id="create" style="margin-bottom:12px">
+    <div class="create-head">
+      <div class="seg"><button type="button" id="kindImage" class="on">Image</button><button type="button" id="kindVideo">Video</button></div>
+      <select id="preset"><option value="">No preset</option></select>
+      <span class="sub" id="createHint"></span>
+    </div>
+    <div class="preset-frag" id="presetFrag"></div>
+    <form id="form" autocomplete="off">
+      <div class="grid cols">
+        <div>
+          <div id="imageBuilder">
+            <div class="row">
+              <div><label for="f_subject">Subject (who or what)</label><input type="text" id="f_subject" placeholder="a Roman senator waking up"></div>
+              <div><label for="f_setting">Setting</label><input type="text" id="f_setting" placeholder="marble villa bedroom at dawn"></div>
+            </div>
+            <div class="row three">
+              <div><label for="f_camera">Camera and lens</label><input type="text" id="f_camera" placeholder="35mm, eye level"></div>
+              <div><label for="f_light">Lighting</label><input type="text" id="f_light" placeholder="warm sunlight through columns"></div>
+              <div><label for="f_mood">Mood and style</label><input type="text" id="f_mood" placeholder="cinematic, photoreal"></div>
+            </div>
+            <div class="row one"><div><label for="f_details">Extra details</label><input type="text" id="f_details" placeholder="silk sheets, a toga folded on a chair"></div></div>
+          </div>
+          <div id="videoBuilder" class="hidden">
+            <div class="row">
+              <div><label for="m_camera">Camera move</label><input type="text" id="m_camera" placeholder="slow push-in"></div>
+              <div><label for="m_subject">Subject motion</label><input type="text" id="m_subject" placeholder="hands lift slightly, head turns to the window"></div>
+            </div>
+            <div class="row">
+              <div><label for="m_atmo">Atmosphere</label><input type="text" id="m_atmo" placeholder="curtains move, dust in the light"></div>
+              <div><label for="m_keep">Keep still</label><input type="text" id="m_keep" placeholder="keep the sign readable, face stays in frame"></div>
+            </div>
+          </div>
+          <div class="row one">
+            <div><label for="prompt">Final prompt <button type="button" class="linkbtn" id="rebuild">rebuild from fields</button></label><textarea id="prompt" class="final"></textarea></div>
+          </div>
+          <div class="row one">
+            <div><label for="negative">Avoid (negative prompt)</label><input type="text" id="negative" placeholder="text, watermark, logo"></div>
+          </div>
+        </div>
+
+        <div>
+          <div id="imageOptions">
+            <div class="row three">
+              <div><label for="imgModel">Model</label><select id="imgModel"><option value="nano-banana-2">nano-banana-2</option><option value="gpt-image-2">gpt-image-2 (text)</option></select></div>
+              <div><label for="aspect">Aspect</label><select id="aspect"><option>9:16</option><option>16:9</option><option>1:1</option><option>4:5</option><option>auto</option></select></div>
+              <div><label for="resolution">Resolution</label><select id="resolution"><option>1K</option><option>2K</option><option>4K</option></select></div>
+            </div>
+            <div class="row">
+              <div><label>Variations</label><div class="seg" id="countSeg"><button type="button" data-n="1" class="on">1</button><button type="button" data-n="2">2</button><button type="button" data-n="3">3</button><button type="button" data-n="4">4</button></div></div>
+              <div><label for="imgName">File name (optional)</label><input type="text" id="imgName" placeholder="roman-senator"></div>
+            </div>
+            <h3>Reference images <span class="sub" id="refHint">(up to 3, nano-banana-2 only)</span></h3>
+            <div class="refs" id="refs"></div>
+            <input type="file" id="refFile" accept="image/*" multiple class="hidden">
+          </div>
+
+          <div id="videoOptions" class="hidden">
+            <h3>Source still</h3>
+            <div class="source" id="source"><span class="muted">Click Animate on an image in the board, or paste a URL below.</span></div>
+            <div class="row one"><div><input type="text" id="still" placeholder="https://... or a file name from the board"></div></div>
+            <div class="row three">
+              <div><label for="vidModel">Model</label><select id="vidModel"><option value="pro">pro (default)</option><option value="lite">lite (budget)</option><option value="2.5">2.5</option></select></div>
+              <div><label for="duration">Duration (s)</label><input type="number" id="duration" value="10" min="2" max="15" step="1"></div>
+              <div><label for="seed">Seed (-1 random)</label><input type="number" id="seed" value="-1" step="1"></div>
+            </div>
+            <div class="row">
+              <div><label for="vidName">File name (optional)</label><input type="text" id="vidName"></div>
+              <div style="padding-top:18px"><label class="check"><input type="checkbox" id="cameraFixed"> Camera fixed</label></div>
+            </div>
+            <label class="check" style="margin-bottom:8px"><input type="checkbox" id="approve"> I approve this paid run</label>
+          </div>
+          <label class="check"><input type="checkbox" id="overrideCap"> Override spend cap for this run</label>
+          <div class="quote" id="quote"></div>
+          <div class="actions">
+            <button type="button" class="ghost" id="quoteBtn">Quote</button>
+            <button type="submit" class="primary" id="goBtn">Generate image</button>
+            <button type="button" class="ghost" id="clearBtn">Clear</button>
+            <span class="sub" id="formMsg"></span>
+          </div>
+        </div>
+      </div>
+    </form>
   </section>
 
   <section>
-    <div class="chart-head" style="margin-bottom:8px">
-      <h2 style="margin:0">Generations</h2>
-      <div class="filters">
-        <button class="ghost on" data-f="all">All</button>
-        <button class="ghost" data-f="image">Images</button>
-        <button class="ghost" data-f="video">Videos</button>
-      </div>
+    <div class="toolbar">
+      <h2 style="margin:0 8px 0 0">Review board</h2>
+      <div class="seg" id="kindFilter"><button type="button" data-f="all" class="on">All</button><button type="button" data-f="image">Images</button><button type="button" data-f="video">Videos</button></div>
+      <button type="button" class="ghost small" id="starFilter">★ Starred only</button>
+      <button type="button" class="ghost small" id="showRejected">Show rejected</button>
+      <input type="search" id="search" placeholder="Search prompts and notes">
+      <button type="button" class="ghost small hidden" id="compareBtn">Compare 2 selected</button>
+      <span class="sub" id="boardCount"></span>
     </div>
-    <div class="grid gallery" id="gallery"></div>
+    <div class="board" id="board"></div>
   </section>
 </main>
+
+<div class="modal" id="modal"><div class="box"><button class="ghost small close" id="modalClose">Close</button><div id="modalBody"></div></div></div>
+<div class="toast" id="toast"></div>
 
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
   const fmtUsd = (v) => "$" + (Number(v) || 0).toFixed(2);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-  let state = null, kind = "image", filter = "all", tableOpen = false;
-  const jobs = new Map();           // id -> job (merged from state + polls)
-  const polling = new Set();
+  let state = null, presets = {}, kind = "image", count = 1, manualPrompt = false, tableOpen = false;
+  let filter = {kind: "all", starred: false, rejected: false, q: ""};
+  const jobs = new Map(), polling = new Set(), refSel = [], cmpSel = [];
+  let source = null, parentId = null;   // video source item; follow-up parent
 
   async function api(path, body) {
     const r = await fetch(path, body ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : {cache: "no-store"});
     return r.json();
   }
+  function toast(msg, ms = 2600) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms); }
+  const refOf = (g) => state && state.mode === "local" && g.path ? g.path : g.url;
 
   // ---------- state loop ----------
   async function load() {
@@ -258,108 +298,68 @@
       if (!state.ok) throw new Error(state.error || "state failed");
       (state.jobs || []).forEach(j => jobs.set(j.id, {...(jobs.get(j.id) || {}), ...j}));
       render();
-    } catch (e) {
-      $("updated").textContent = "Dashboard API not reachable: " + e.message;
-    }
+    } catch (e) { $("updated").textContent = "Dashboard API not reachable: " + e.message; }
     jobs.forEach(j => { if (j.status === "running") pollJob(j.id); });
     setTimeout(load, 20000);
   }
-
   async function pollJob(id) {
     if (polling.has(id)) return;
     polling.add(id);
     try {
       const r = await api("/api/tasks?id=" + encodeURIComponent(id));
-      if (r.ok && r.job) {
-        jobs.set(id, r.job);
-        renderJobs();
-        if (r.job.status !== "running") { setTimeout(load, 800); return; }
-      } else if (r.gone) {
-        jobs.delete(id); renderJobs(); setTimeout(load, 800); return;
-      }
-    } catch {}
-    finally { polling.delete(id); }
+      if (r.ok && r.job) { jobs.set(id, r.job); renderJobs(); if (r.job.status !== "running") { setTimeout(load, 800); return; } }
+      else if (r.gone) { jobs.delete(id); renderJobs(); setTimeout(load, 800); return; }
+    } catch {} finally { polling.delete(id); }
     const j = jobs.get(id);
     if (j && j.status === "running") setTimeout(() => pollJob(id), state && state.mode === "vercel" ? 12000 : 4000);
   }
-
   function render() {
     const s = state;
     $("dir").textContent = s.mode === "vercel" ? "Outputs stored in Vercel Blob" : s.generations_dir;
     $("updated").textContent = "Updated " + new Date(s.now).toLocaleTimeString();
-    renderBanner(s); renderTiles(s); renderChart(s.daily, s.spend); renderJobs(); renderGallery(s.generations);
-    $("stills").innerHTML = s.generations.filter(g => g.kind === "image").map(g => `<option value="${esc(g.path ? g.name : g.url)}">${esc(g.name)}</option>`).join("");
+    renderBanner(s); renderTiles(s); renderChart(s.daily, s.spend); renderJobs(); renderRefs(); renderBoard();
   }
-
   function renderBanner(s) {
     const b = $("banner");
     if (s.key_present && !s.setup_error) { b.classList.add("hidden"); return; }
     b.classList.remove("hidden");
-    if (!s.key_present) {
-      b.innerHTML = s.mode === "vercel"
-        ? `<b>No API key.</b> Add <code>KIE_API_KEY</code> in the Vercel project's Environment Variables (Settings), then redeploy. The gallery still shows past runs.`
-        : `<b>No API key.</b> Copy <code>.env.example</code> to <code>.env</code> in the skill folder, paste your kie.ai key into <code>KIE_API_KEY=</code>, then restart the dashboard.`;
-    } else {
-      b.innerHTML = `<b>Setup problem.</b> ${esc(s.setup_error)}`;
-    }
-  }
-
-  function meterClass(used, cap) {
-    if (cap <= 0) return "";
-    const r = used / cap;
-    return r >= 1 ? "over" : r >= 0.8 ? "warn" : "";
+    b.innerHTML = !s.key_present
+      ? (s.mode === "vercel" ? `<b>No API key.</b> Add <code>KIE_API_KEY</code> in the Vercel project's Environment Variables, then redeploy.`
+                             : `<b>No API key.</b> Copy <code>.env.example</code> to <code>.env</code>, paste your kie.ai key, restart the dashboard.`)
+      : `<b>Setup problem.</b> ${esc(s.setup_error)}`;
   }
   function meter(used, cap) {
-    const pct = cap > 0 ? Math.min(100, used / cap * 100) : 0;
-    const cls = meterClass(used, cap);
-    const word = cls === "over" ? "Over cap" : cls === "warn" ? "Near cap" : "Within cap";
-    return `<div class="meter ${cls}"><div style="width:${pct.toFixed(1)}%"></div></div>
-            <span class="status ${cls}">${word}, ${pct.toFixed(0)}% of ${fmtUsd(cap)}</span>`;
+    const pct = cap > 0 ? Math.min(100, used / cap * 100) : 0, r = cap > 0 ? used / cap : 0;
+    const cls = r >= 1 ? "over" : r >= 0.8 ? "warn" : "", word = cls === "over" ? "Over cap" : cls === "warn" ? "Near cap" : "Within cap";
+    return `<div class="meter ${cls}"><div style="width:${pct.toFixed(1)}%"></div></div><span class="status ${cls}">${word}, ${pct.toFixed(0)}% of ${fmtUsd(cap)}</span>`;
   }
-
   function renderTiles(s) {
     const c = s.credits || {}, sp = s.spend;
-    let creditVal, creditNote;
-    if (c.value != null) { creditVal = Number(c.value).toLocaleString(); creditNote = `about ${fmtUsd(c.usd)} remaining on kie.ai`; }
-    else { creditVal = "–"; creditNote = c.error || "checking…"; }
+    const creditVal = c.value != null ? Number(c.value).toLocaleString() : "–";
+    const creditNote = c.value != null ? `about ${fmtUsd(c.usd)} remaining on kie.ai` : (c.error || "checking…");
+    const starred = s.generations.filter(g => g.rating === "star").length;
     $("tiles").innerHTML = `
-      <div class="card tile hero"><div class="label">Credits remaining</div><div class="value">${creditVal}</div>
-        <div class="note">${esc(creditNote)} <button class="linkbtn" id="refreshCredits">refresh</button></div></div>
+      <div class="card tile hero"><div class="label">Credits remaining</div><div class="value">${creditVal}</div><div class="note">${esc(creditNote)} <button class="linkbtn" id="refreshCredits">refresh</button></div></div>
       <div class="card tile"><div class="label">Spent today</div><div class="value">${fmtUsd(sp.today_usd)}</div>${meter(sp.today_usd, sp.session_cap_usd)}</div>
       <div class="card tile"><div class="label">Spent this month</div><div class="value">${fmtUsd(sp.month_usd)}</div>${meter(sp.month_usd, sp.monthly_cap_usd)}</div>
-      <div class="card tile"><div class="label">Runs this month</div><div class="value">${sp.month_runs}</div>
-        <div class="note">${sp.today_runs} today · ${s.generations.length} outputs kept</div></div>`;
+      <div class="card tile"><div class="label">Outputs</div><div class="value">${s.generations.length}</div><div class="note">${starred} starred · ${sp.month_runs} runs this month</div></div>`;
     $("refreshCredits").onclick = async () => { await api("/api/refresh-credits", {}); setTimeout(load, 1200); };
   }
 
-  // ---------- chart (single series, daily columns) ----------
-  function niceMax(v) {
-    if (v <= 0) return 1;
-    const p = Math.pow(10, Math.floor(Math.log10(v)));
-    for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p;
-    return 10 * p;
-  }
+  // ---------- chart ----------
+  function niceMax(v) { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p; return 10 * p; }
   function renderChart(daily, spend) {
-    const host = $("chart"); const W = host.clientWidth || 600, H = 220;
-    const padL = 44, padR = 12, padT = 18, padB = 26;
+    const host = $("chart"); const W = host.clientWidth || 600, H = 200, padL = 44, padR = 12, padT = 18, padB = 26;
     const maxV = niceMax(Math.max(0, ...daily.map(d => d.usd)));
     const n = daily.length, band = (W - padL - padR) / n, bw = Math.min(24, band * 0.6);
-    const y = v => padT + (H - padT - padB) * (1 - v / maxV);
-    const base = H - padB;
+    const y = v => padT + (H - padT - padB) * (1 - v / maxV), base = H - padB;
     const maxIdx = daily.reduce((m, d, i) => d.usd > daily[m].usd ? i : m, 0);
-    let g = "";
-    for (let t = 0; t <= 4; t++) {
-      const v = maxV * t / 4, yy = y(v);
-      g += `<line class="${t ? "grid" : "base"}" x1="${padL}" x2="${W - padR}" y1="${yy}" y2="${yy}"/>`;
-      g += `<text x="${padL - 6}" y="${yy + 4}" text-anchor="end">${v >= 1 ? "$" + v.toFixed(v % 1 ? 2 : 0) : "$" + v.toFixed(2)}</text>`;
-    }
-    let hits = "", bars = "";
+    let g = "", hits = "", bars = "";
+    for (let t = 0; t <= 4; t++) { const v = maxV * t / 4, yy = y(v); g += `<line class="${t ? "grid" : "base"}" x1="${padL}" x2="${W - padR}" y1="${yy}" y2="${yy}"/><text x="${padL - 6}" y="${yy + 4}" text-anchor="end">${v >= 1 ? "$" + v.toFixed(v % 1 ? 2 : 0) : "$" + v.toFixed(2)}</text>`; }
     daily.forEach((d, i) => {
-      const x = padL + band * i + (band - bw) / 2, top = y(d.usd), h = Math.max(0, base - top);
-      const r = Math.min(4, h);
-      const path = h > 0 ? `M${x},${base} V${top + r} q0,-${r} ${r},-${r} H${x + bw - r} q${r},0 ${r},${r} V${base} Z` : "";
+      const x = padL + band * i + (band - bw) / 2, top = y(d.usd), h = Math.max(0, base - top), r = Math.min(4, h);
       hits += `<rect class="hit" x="${padL + band * i}" y="${padT}" width="${band}" height="${H - padT - padB}" data-i="${i}"/>`;
-      bars += `<path class="bar" d="${path}"/>`;
+      bars += `<path class="bar" d="${h > 0 ? `M${x},${base} V${top + r} q0,-${r} ${r},-${r} H${x + bw - r} q${r},0 ${r},${r} V${base} Z` : ""}"/>`;
       const day = +d.date.slice(8);
       if (n <= 16 || day === 1 || day % 5 === 0) bars += `<text x="${padL + band * i + band / 2}" y="${H - 8}" text-anchor="middle">${day}</text>`;
       if (i === maxIdx && d.usd > 0) bars += `<text class="lbl" x="${x + bw / 2}" y="${top - 5}" text-anchor="middle">${fmtUsd(d.usd)}</text>`;
@@ -367,131 +367,282 @@
     host.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily spend this month">${g}${hits}${bars}</svg>`;
     const tip = $("tip");
     host.querySelectorAll(".hit").forEach(el => {
-      el.addEventListener("mousemove", ev => {
-        const d = daily[+el.dataset.i];
-        tip.innerHTML = `<b>${d.date}</b><span>${fmtUsd(d.usd)} · ${d.runs} run${d.runs === 1 ? "" : "s"}</span>`;
-        tip.style.display = "block";
-        const rect = host.parentElement.getBoundingClientRect();
-        tip.style.left = Math.min(ev.clientX - rect.left + 12, rect.width - 150) + "px";
-        tip.style.top = (ev.clientY - rect.top - 10) + "px";
-      });
+      el.addEventListener("mousemove", ev => { const d = daily[+el.dataset.i]; tip.innerHTML = `<b>${d.date}</b><span>${fmtUsd(d.usd)} · ${d.runs} run${d.runs === 1 ? "" : "s"}</span>`; tip.style.display = "block"; const rect = host.parentElement.getBoundingClientRect(); tip.style.left = Math.min(ev.clientX - rect.left + 12, rect.width - 150) + "px"; tip.style.top = (ev.clientY - rect.top - 10) + "px"; });
       el.addEventListener("mouseleave", () => tip.style.display = "none");
     });
-    $("chartTable").innerHTML = `<table><thead><tr><th>Day</th><th class="num">Runs</th><th class="num">USD</th></tr></thead><tbody>` +
-      daily.map(d => `<tr><td>${d.date}</td><td class="num">${d.runs}</td><td class="num">${fmtUsd(d.usd)}</td></tr>`).join("") +
-      `<tr><td><b>Month</b></td><td class="num"><b>${spend.month_runs}</b></td><td class="num"><b>${fmtUsd(spend.month_usd)}</b></td></tr></tbody></table>`;
+    $("chartTable").innerHTML = `<table><thead><tr><th>Day</th><th class="num">Runs</th><th class="num">USD</th></tr></thead><tbody>` + daily.map(d => `<tr><td>${d.date}</td><td class="num">${d.runs}</td><td class="num">${fmtUsd(d.usd)}</td></tr>`).join("") + `<tr><td><b>Month</b></td><td class="num"><b>${spend.month_runs}</b></td><td class="num"><b>${fmtUsd(spend.month_usd)}</b></td></tr></tbody></table>`;
   }
-  $("tableToggle").onclick = () => {
-    tableOpen = !tableOpen;
-    $("chart").classList.toggle("hidden", tableOpen); $("chartTable").classList.toggle("hidden", !tableOpen);
-    $("tableToggle").textContent = tableOpen ? "Chart view" : "Table view";
-  };
+  $("tableToggle").onclick = () => { tableOpen = !tableOpen; $("chart").classList.toggle("hidden", tableOpen); $("chartTable").classList.toggle("hidden", !tableOpen); $("tableToggle").textContent = tableOpen ? "Chart view" : "Table view"; };
   window.addEventListener("resize", () => state && renderChart(state.daily, state.spend));
 
   // ---------- jobs ----------
   function renderJobs() {
     const host = $("jobs");
-    const list = [...jobs.values()].sort((a, b) => b.started_at - a.started_at).slice(0, 30);
+    const list = [...jobs.values()].sort((a, b) => b.started_at - a.started_at).slice(0, 40);
     if (!list.length) { host.innerHTML = `<div class="empty">Nothing running.</div>`; return; }
     host.innerHTML = list.map(j => {
-      const r = j.result || {};
-      let msg = "";
+      const r = j.result || {}; let msg = "";
       if (j.status === "running") msg = `${j.kie_state || "running"} · ${Math.round((Date.now() / 1000) - j.started_at)}s`;
       else if (j.status === "done") msg = `${esc(r.file || r.url)} · ${r.credits_consumed ?? "?"} credits · ${fmtUsd(r.usd)}` + (r.media && r.media.width ? ` · ${r.media.width}x${r.media.height}${r.media.duration_s ? " · " + r.media.duration_s + "s" : ""}` : "");
       else if (j.status === "approval_required") msg = `Needs approval: ${fmtUsd(r.usd_est)} for ${r.duration_s}s on ${r.model}. Tick "I approve this paid run" and generate again.`;
       else msg = esc(r.error || j.message || "failed");
-      return `<div class="job"><span class="pill ${j.status}">${j.status.replace("_", " ")}</span>
-        <div><div>${esc(j.kind)} · ${esc(j.model || "default")} · ${esc((j.prompt || "").slice(0, 90))}${(j.prompt || "").length > 90 ? "…" : ""}</div><div class="msg">${msg}</div></div>
-        <span class="sub">${new Date(j.started_at * 1000).toLocaleTimeString()}</span></div>`;
+      const v = j.variant ? ` v${j.variant}` : "";
+      return `<div class="job"><span class="pill ${j.status}">${j.status.replace("_", " ")}</span><div><div>${esc(j.kind)}${v} · ${esc(j.model || "default")} · ${esc((j.prompt || "").slice(0, 80))}${(j.prompt || "").length > 80 ? "…" : ""}</div><div class="msg">${msg}</div></div><span class="sub">${new Date(j.started_at * 1000).toLocaleTimeString()}</span></div>`;
     }).join("");
   }
 
-  // ---------- gallery ----------
-  function renderGallery(items) {
-    const host = $("gallery");
-    const list = items.filter(g => filter === "all" || g.kind === filter);
-    if (!list.length) { host.innerHTML = `<div class="empty card" style="grid-column:1/-1">No generations yet. Make your first still with the form above.</div>`; return; }
-    host.innerHTML = list.map(g => {
-      const media = g.kind === "video"
-        ? `<video src="${esc(g.url)}" controls preload="metadata" muted></video>`
-        : `<img src="${esc(g.url)}" loading="lazy" alt="${esc(g.prompt || g.name)}">`;
-      const dims = g.media && g.media.width ? `${g.media.width}x${g.media.height}${g.media.duration_s ? " · " + g.media.duration_s + "s" : ""}` : "";
-      const when = (g.created_at || g.modified || "").slice(0, 16).replace("T", " ");
-      const cost = g.usd != null ? fmtUsd(g.usd) : "";
-      return `<div class="item" data-ref="${esc(g.path ? g.name : g.url)}">
-        <div class="media">${media}</div>
-        <div class="body">
-          <div class="prompt" title="${esc(g.prompt || "")}">${esc(g.prompt || g.name)}</div>
-          <div class="meta"><span>${esc(g.model || g.kind)}</span><span>${cost}</span></div>
-          <div class="meta"><span>${when}</span><span>${dims}</span></div>
-          <div class="btns">
-            ${g.kind === "image" ? `<button class="ghost animate">Animate</button>` : ""}
-            ${g.path ? `<button class="ghost copy" data-path="${esc(g.path)}">Copy path</button>` : ""}
-            <a class="ghost" href="${esc(g.url)}" target="_blank" rel="noopener">Open</a>
-          </div>
-        </div></div>`;
-    }).join("");
-    host.querySelectorAll(".animate").forEach(b => b.onclick = () => {
-      setKind("video"); $("still").value = b.closest(".item").dataset.ref;
-      $("quote").textContent = ""; $("form").scrollIntoView({behavior: "smooth", block: "start"}); $("prompt").focus();
-    });
-    host.querySelectorAll(".copy").forEach(b => b.onclick = async () => {
-      try { await navigator.clipboard.writeText(b.dataset.path); b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy path", 1200); } catch { prompt("Path", b.dataset.path); }
-    });
+  // ---------- presets and builder ----------
+  async function loadPresets() {
+    try { presets = await (await fetch("/presets.json", {cache: "no-store"})).json(); } catch { presets = {}; }
+    $("preset").innerHTML = `<option value="">No preset</option>` + Object.entries(presets).map(([k, p]) => `<option value="${esc(k)}">${esc(p.label || k)}</option>`).join("");
   }
-  document.querySelectorAll(".filters button").forEach(b => b.onclick = () => {
-    filter = b.dataset.f; document.querySelectorAll(".filters button").forEach(x => x.classList.toggle("on", x === b));
-    state && renderGallery(state.generations);
-  });
-
-  // ---------- form ----------
+  function preset() { return presets[$("preset").value] || null; }
+  function applyPreset() {
+    const p = preset();
+    $("presetFrag").textContent = p ? (kind === "image" ? "Locked still fragment: " + p.still : "Locked motion fragment: " + p.motion) : "";
+    if (!p) { compose(); return; }
+    if (p.aspect) $("aspect").value = p.aspect;
+    if (p.image_model) $("imgModel").value = p.image_model;
+    if (p.video_model) $("vidModel").value = p.video_model;
+    if (p.duration) $("duration").value = p.duration;
+    $("cameraFixed").checked = !!p.camera_fixed;
+    if (p.negative && !$("negative").value) $("negative").value = p.negative;
+    manualPrompt = false; compose();
+  }
+  $("preset").onchange = applyPreset;
+  const join = (parts) => parts.map(s => (s || "").trim()).filter(Boolean).join(", ");
+  function compose(force) {
+    if (manualPrompt && !force) return;
+    const p = preset();
+    let text;
+    if (kind === "image") text = join([$("f_subject").value, $("f_setting").value, p && p.still, $("f_camera").value, $("f_light").value, $("f_mood").value, $("f_details").value]);
+    else text = join([$("m_camera").value, $("m_subject").value, $("m_atmo").value, p && p.motion, $("m_keep").value ? "keep: " + $("m_keep").value : ""]);
+    $("prompt").value = text;
+  }
+  ["f_subject", "f_setting", "f_camera", "f_light", "f_mood", "f_details", "m_camera", "m_subject", "m_atmo", "m_keep"].forEach(id => $(id).addEventListener("input", () => compose()));
+  $("prompt").addEventListener("input", () => { manualPrompt = true; });
+  $("rebuild").onclick = () => { manualPrompt = false; compose(true); };
+  function fields() {
+    return kind === "image"
+      ? {subject: $("f_subject").value, setting: $("f_setting").value, camera: $("f_camera").value, lighting: $("f_light").value, mood: $("f_mood").value, details: $("f_details").value}
+      : {camera: $("m_camera").value, subject: $("m_subject").value, atmosphere: $("m_atmo").value, keep: $("m_keep").value};
+  }
+  function setFields(f) {
+    const map = kind === "image" ? {subject: "f_subject", setting: "f_setting", camera: "f_camera", lighting: "f_light", mood: "f_mood", details: "f_details"} : {camera: "m_camera", subject: "m_subject", atmosphere: "m_atmo", keep: "m_keep"};
+    Object.entries(map).forEach(([k, id]) => $(id).value = (f && f[k]) || "");
+  }
   function setKind(k) {
     kind = k;
     $("kindImage").classList.toggle("on", k === "image"); $("kindVideo").classList.toggle("on", k === "video");
-    $("imageFields").classList.toggle("hidden", k !== "image"); $("videoFields").classList.toggle("hidden", k !== "video");
-    $("goBtn").textContent = k === "image" ? "Generate image" : "Generate video";
-    $("quote").textContent = ""; updateGo();
+    ["imageBuilder", "imageOptions"].forEach(id => $(id).classList.toggle("hidden", k !== "image"));
+    ["videoBuilder", "videoOptions"].forEach(id => $(id).classList.toggle("hidden", k !== "video"));
+    $("goBtn").textContent = k === "image" ? (count > 1 ? `Generate ${count} variations` : "Generate image") : "Generate video";
+    $("createHint").textContent = k === "image" ? "Stills are cheap: make variations, pick the best, then animate." : "One paid run per approval. Clips inherit the still's size.";
+    $("quote").textContent = ""; manualPrompt = false; applyPreset(); updateGo();
   }
   function updateGo() { $("goBtn").disabled = kind === "video" && !$("approve").checked; }
   $("kindImage").onclick = () => setKind("image"); $("kindVideo").onclick = () => setKind("video");
   $("approve").onchange = updateGo;
+  $("countSeg").querySelectorAll("button").forEach(b => b.onclick = () => { count = +b.dataset.n; $("countSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); $("goBtn").textContent = count > 1 ? `Generate ${count} variations` : "Generate image"; $("quote").textContent = ""; });
+  $("clearBtn").onclick = () => { $("form").reset(); refSel.length = 0; source = null; parentId = null; count = 1; $("countSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x.dataset.n === "1")); manualPrompt = false; applyPreset(); renderSource(); renderRefs(); $("quote").textContent = ""; $("formMsg").textContent = ""; updateGo(); };
 
+  // ---------- references ----------
+  function renderRefs() {
+    const host = $("refs"); if (!state) return;
+    const lib = [...(state.refs || [])];
+    const known = new Set(lib.map(r => refOf(r)));
+    refSel.forEach(r => { if (!known.has(r.ref)) lib.unshift({name: r.name, url: r.url, path: r.path, _board: true}); });
+    host.innerHTML = lib.map(r => { const ref = refOf(r), on = refSel.some(s => s.ref === ref); return `<div class="ref ${on ? "on" : ""}" data-ref="${esc(ref)}" data-url="${esc(r.url)}" data-name="${esc(r.name)}" data-path="${esc(r.path || "")}" title="${esc(r.name)}"><img src="${esc(r.url)}" loading="lazy" alt=""></div>`; }).join("") + `<div class="ref add" id="refAdd" title="Upload reference images">+</div>`;
+    host.querySelectorAll(".ref:not(.add)").forEach(el => el.onclick = () => toggleRef({ref: el.dataset.ref, url: el.dataset.url, name: el.dataset.name, path: el.dataset.path || null}));
+    $("refAdd").onclick = () => $("refFile").click();
+    $("refHint").textContent = `(${refSel.length}/3 selected, nano-banana-2 only)`;
+  }
+  function toggleRef(r) {
+    const i = refSel.findIndex(s => s.ref === r.ref);
+    if (i >= 0) refSel.splice(i, 1); else { if (refSel.length >= 3) { toast("Up to 3 reference images."); return; } refSel.push(r); if ($("imgModel").value !== "nano-banana-2") { $("imgModel").value = "nano-banana-2"; toast("Switched to nano-banana-2, which accepts references."); } }
+    renderRefs();
+  }
+  $("refFile").onchange = async (ev) => {
+    for (const f of [...ev.target.files]) { try { const up = await uploadImage(f, f.name.replace(/\.[^.]+$/, ""), "ref"); state.refs.unshift({name: up.name, url: up.url, path: up.path}); toggleRef({ref: refOf(up), url: up.url, name: up.name, path: up.path || null}); toast(`Uploaded ${up.name}`); } catch (e) { toast("Upload failed: " + e.message, 4000); } }
+    ev.target.value = "";
+  };
+  function fileToDataUrl(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); }); }
+  async function downscale(dataUrl, max = 2048) {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl; });
+    const scale = Math.min(1, max / Math.max(img.width, img.height));
+    const c = document.createElement("canvas"); c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", 0.9);
+  }
+  async function uploadImage(file, name, kindOfUpload) {
+    let dataUrl = await fileToDataUrl(file);
+    if (file.size > 3.5 * 1024 * 1024 || !/^image\/(png|jpeg)/.test(file.type)) dataUrl = await downscale(dataUrl);
+    const r = await api("/api/upload", {name, data: dataUrl, kind: kindOfUpload});
+    if (!r.ok) throw new Error(r.error || "upload failed");
+    return r;
+  }
+  async function uploadDataUrl(dataUrl, name, kindOfUpload) {
+    if (dataUrl.length > 4.6 * 1024 * 1024) dataUrl = await downscale(dataUrl, 1920);
+    const r = await api("/api/upload", {name, data: dataUrl, kind: kindOfUpload});
+    if (!r.ok) throw new Error(r.error || "upload failed");
+    return r;
+  }
+
+  // ---------- video source ----------
+  function renderSource() {
+    const host = $("source");
+    if (!source) { host.innerHTML = `<span class="muted">Click Animate on an image in the board, or paste a URL below.</span>`; return; }
+    host.innerHTML = `<img src="${esc(source.url)}" alt=""><div><div>${esc(source.name)}</div><div class="muted">${esc((source.prompt || "").slice(0, 80))}</div></div>`;
+    $("still").value = refOf(source);
+  }
+  $("still").addEventListener("input", () => { source = null; renderSource(); $("still").focus(); });
+
+  // ---------- generate ----------
   function payload() {
-    const base = {kind, prompt: $("prompt").value, preset: $("preset").value || null, override_cap: $("overrideCap").checked};
-    if (kind === "image") return {...base, model: $("imgModel").value, aspect: $("aspect").value, resolution: $("resolution").value,
-      name: $("imgName").value || null, refs: $("refs").value.split("\n").map(s => s.trim()).filter(Boolean)};
-    return {...base, image: $("still").value, model: $("vidModel").value, duration: $("duration").value,
-      camera_fixed: $("cameraFixed").checked, name: $("vidName").value || null, approve: $("approve").checked};
+    const base = {kind, prompt: $("prompt").value, negative: $("negative").value, fields: fields(), preset: $("preset").value || null, override_cap: $("overrideCap").checked, parent_id: parentId};
+    if (kind === "image") return {...base, model: $("imgModel").value, aspect: $("aspect").value, resolution: $("resolution").value, count, name: $("imgName").value || null, refs: refSel.map(r => r.ref)};
+    return {...base, image: $("still").value, model: $("vidModel").value, duration: $("duration").value, seed: $("seed").value, camera_fixed: $("cameraFixed").checked, name: $("vidName").value || null, approve: $("approve").checked};
   }
   $("quoteBtn").onclick = async () => {
     const q = await api("/api/quote", payload());
     if (!q.ok) { $("quote").textContent = q.error || "quote failed"; return; }
-    const extra = kind === "video" ? `${q.duration_s}s on ${q.model}` : `${q.resolution} on ${q.model}`;
-    $("quote").innerHTML = `Estimated <b>${fmtUsd(q.usd_est)}</b> (${q.credits_est} credits) for ${esc(extra)}. Remaining today ${fmtUsd(q.spend.remaining_today_usd)}, this month ${fmtUsd(q.spend.remaining_month_usd)}.${q.note ? " " + esc(q.note) : ""}`;
+    const extra = kind === "video" ? `${q.duration_s}s on ${q.model}` : `${q.resolution} on ${q.model}${q.count > 1 ? ` × ${q.count}` : ""}`;
+    const usd = q.usd_est_total ?? q.usd_est, cr = q.credits_est_total ?? q.credits_est;
+    $("quote").innerHTML = `Estimated <b>${fmtUsd(usd)}</b> (${cr} credits) for ${esc(extra)}. Remaining today ${fmtUsd(q.spend.remaining_today_usd)}, this month ${fmtUsd(q.spend.remaining_month_usd)}.${q.note ? " " + esc(q.note) : ""}`;
   };
+  async function submit(p) {
+    const j = await api("/api/generate", p);
+    if (j.ok && j.jobs) { j.jobs.forEach(job => { jobs.set(job.id, job); pollJob(job.id); }); renderJobs(); return j.jobs; }
+    throw new Error(j.error || "failed");
+  }
   $("form").onsubmit = async (ev) => {
     ev.preventDefault();
     const p = payload();
     if (!p.prompt.trim()) { $("formMsg").textContent = "Prompt is required."; return; }
     if (kind === "video" && !p.image.trim()) { $("formMsg").textContent = "Pick a source still."; return; }
     $("formMsg").textContent = "Submitting…"; $("goBtn").disabled = true;
-    try {
-      const j = await api("/api/generate", p);
-      if (j.ok && j.job) {
-        $("formMsg").textContent = "Job started.";
-        jobs.set(j.job.id, j.job); renderJobs(); pollJob(j.job.id);
-        $("approve").checked = false;
-        $("jobsCard").scrollIntoView({behavior: "smooth", block: "nearest"});
-      } else {
-        $("formMsg").textContent = j.error || "failed";
-        if (j.quote) $("quote").innerHTML = `Estimated <b>${fmtUsd(j.quote.usd_est)}</b> (${j.quote.credits_est} credits).`;
-      }
-    } catch (e) { $("formMsg").textContent = "Request failed: " + e.message; }
+    try { const js = await submit(p); $("formMsg").textContent = js.length > 1 ? `${js.length} variations started.` : "Job started."; $("approve").checked = false; parentId = null; }
+    catch (e) { $("formMsg").textContent = e.message; }
     updateGo();
   };
 
-  setKind("image");
-  load();
+  // ---------- review board ----------
+  function visible(g) {
+    if (filter.kind !== "all" && g.kind !== filter.kind) return false;
+    if (filter.starred && g.rating !== "star") return false;
+    if (!filter.rejected && (g.rating === "reject" || g.hidden)) return false;
+    if (filter.q) { const q = filter.q.toLowerCase(); if (!((g.prompt || "").toLowerCase().includes(q) || (g.note || "").toLowerCase().includes(q) || (g.name || "").toLowerCase().includes(q))) return false; }
+    return true;
+  }
+  function card(g) {
+    const media = g.kind === "video" ? `<video src="${esc(g.url)}" controls preload="metadata" muted></video>` : `<img src="${esc(g.url)}" loading="lazy" alt="${esc(g.prompt || g.name)}">`;
+    const dims = g.media && g.media.width ? `${g.media.width}x${g.media.height}${g.media.duration_s ? " · " + g.media.duration_s + "s" : ""}` : "";
+    const when = (g.created_at || g.modified || "").slice(5, 16).replace("T", " ");
+    const res = g.params && g.params.resolution ? g.params.resolution : "";
+    const follow = g.kind === "image"
+      ? `<button class="ghost act" data-a="animate">Animate</button><button class="ghost act" data-a="tweak">Tweak</button><button class="ghost act" data-a="ref">Use as ref</button><button class="ghost act" data-a="reframe169">16:9</button><button class="ghost act" data-a="reframe11">1:1</button><button class="ghost act" data-a="hires">${res === "1K" || !res ? "2K" : "4K"}</button>`
+      : `<button class="ghost act" data-a="extend">Extend</button><button class="ghost act" data-a="redo">Redo</button>`;
+    return `<div class="item ${g.rating === "star" ? "starred" : ""} ${g.rating === "reject" ? "rejected" : ""} ${cmpSel.includes(g.id) ? "cmp" : ""}" data-id="${esc(g.id)}">
+      ${g.variant ? `<span class="badge">v${g.variant}</span>` : ""}
+      <div class="media act" data-a="view">${media}</div>
+      <div class="body">
+        <div class="prompt" title="${esc(g.prompt || "")}">${esc(g.prompt || g.name)}</div>
+        ${g.note ? `<div class="note" title="${esc(g.note)}">${esc(g.note)}</div>` : ""}
+        <div class="meta"><span>${esc(g.model || g.kind)}${res ? " · " + res : ""}</span><span>${g.usd != null ? fmtUsd(g.usd) : ""}</span></div>
+        <div class="meta"><span>${when}</span><span>${dims}</span></div>
+        <div class="btns">
+          <button class="ghost act star ${g.rating === "star" ? "on" : ""}" data-a="star" title="Star">★</button>
+          <button class="ghost act rej ${g.rating === "reject" ? "on" : ""}" data-a="reject" title="Reject">✕</button>
+          <button class="ghost act" data-a="note" title="Note">Note</button>
+          <button class="ghost act ${cmpSel.includes(g.id) ? "on" : ""}" data-a="cmp" title="Select for compare">Cmp</button>
+        </div>
+        <div class="btns">${follow}${g.path ? `<button class="ghost act" data-a="copy">Path</button>` : ""}<a class="ghost" href="${esc(g.url)}" target="_blank" rel="noopener">Open</a></div>
+      </div></div>`;
+  }
+  function renderBoard() {
+    const host = $("board"); if (!state) return;
+    const items = state.generations.filter(visible);
+    $("boardCount").textContent = `${items.length} of ${state.generations.length}`;
+    if (!items.length) { host.innerHTML = `<div class="empty card">Nothing to show. Generate a still above or change the filters.</div>`; return; }
+    const groups = new Map(); items.forEach(g => { const k = g.group || "_" + g.id; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(g); });
+    let html = "", loose = [];
+    const flush = () => { if (loose.length) { html += `<div class="gallery">${loose.map(card).join("")}</div>`; loose = []; } };
+    groups.forEach((gs, k) => {
+      const all = state.generations.filter(x => x.group === k);
+      if (k.startsWith("_") || all.length < 2) { loose.push(...gs); return; }
+      flush();
+      const picked = all.find(x => x.rating === "star");
+      html += `<div class="set"><div class="set-head"><span>Variation set · ${all.length} stills · ${picked ? "picked: " + esc(picked.name) : "pick one to reject the rest"}</span><span>${esc((gs[0].prompt || "").slice(0, 70))}</span></div><div class="gallery">${gs.map(g => card(g).replace('<div class="btns">', `<div class="btns"><button class="ghost act" data-a="pick">Pick</button>`)).join("")}</div></div>`;
+    });
+    flush();
+    host.innerHTML = html;
+    host.querySelectorAll(".act").forEach(el => el.onclick = (ev) => { ev.preventDefault(); const id = el.closest(".item").dataset.id; action(el.dataset.a, state.generations.find(g => g.id === id)); });
+  }
+  async function setItem(g, patch) {
+    Object.assign(g, patch); renderBoard();
+    const r = await api("/api/item", {id: g.id, ...patch});
+    if (!r.ok) toast("Could not save: " + (r.error || "unknown"), 4000);
+  }
+  async function action(a, g) {
+    if (!g) return;
+    const resOf = () => (g.params && g.params.resolution) || "1K";
+    switch (a) {
+      case "view": openModal([g]); break;
+      case "star": await setItem(g, {rating: g.rating === "star" ? null : "star", hidden: false}); break;
+      case "reject": await setItem(g, {rating: g.rating === "reject" ? null : "reject", hidden: g.rating !== "reject"}); break;
+      case "note": { const n = prompt("Note for this item", g.note || ""); if (n !== null) await setItem(g, {note: n}); break; }
+      case "cmp": { const i = cmpSel.indexOf(g.id); if (i >= 0) cmpSel.splice(i, 1); else { if (cmpSel.length >= 2) cmpSel.shift(); cmpSel.push(g.id); } $("compareBtn").classList.toggle("hidden", cmpSel.length !== 2); renderBoard(); break; }
+      case "pick": { const sibs = state.generations.filter(x => x.group === g.group && x.id !== g.id); await setItem(g, {rating: "star", hidden: false}); for (const s of sibs) if (s.rating !== "star") await setItem(s, {rating: "reject", hidden: true}); toast("Picked. Siblings rejected."); break; }
+      case "copy": try { await navigator.clipboard.writeText(g.path); toast("Path copied"); } catch { prompt("Path", g.path); } break;
+      case "animate": setKind("video"); source = g; parentId = g.id; renderSource(); if (g.fields && g.kind === "image") {} $("create").scrollIntoView({behavior: "smooth"}); $("m_camera").focus(); break;
+      case "tweak": setKind("image"); $("preset").value = g.preset || ""; applyPreset(); setFields(g.fields); if (!g.fields || !g.fields.subject) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true); $("negative").value = g.negative || ""; if (g.params) { if (g.params.aspect_ratio) $("aspect").value = g.params.aspect_ratio; if (g.params.resolution) $("resolution").value = g.params.resolution; } if (g.model) $("imgModel").value = g.model; refSel.length = 0; (g.refs || []).forEach(r => refSel.push({ref: r, url: r, name: r.split("/").pop()})); parentId = g.id; renderRefs(); $("create").scrollIntoView({behavior: "smooth"}); toast("Loaded into the builder. Adjust and generate."); break;
+      case "ref": toggleRef({ref: refOf(g), url: g.url, name: g.name, path: g.path || null}); setKind("image"); toast("Added as a reference image."); break;
+      case "reframe169": case "reframe11": {
+        const aspect = a === "reframe169" ? "16:9" : "1:1";
+        toast(`Generating ${aspect} version…`);
+        try { await submit({kind: "image", prompt: g.prompt, negative: g.negative || "", fields: g.fields || null, model: "nano-banana-2", aspect, resolution: resOf(), count: 1, name: (g.name || "").replace(/\.[^.]+$/, "") + "-" + aspect.replace(":", "x"), refs: [refOf(g)], parent_id: g.id, preset: g.preset || null}); } catch (e) { toast(e.message, 4000); }
+        break; }
+      case "hires": {
+        const next = resOf() === "1K" ? "2K" : "4K";
+        toast(`Generating ${next} version…`);
+        try { await submit({kind: "image", prompt: g.prompt, negative: g.negative || "", fields: g.fields || null, model: g.model === "gpt-image-2" ? "gpt-image-2" : "nano-banana-2", aspect: (g.params && g.params.aspect_ratio) || "9:16", resolution: next, count: 1, name: (g.name || "").replace(/\.[^.]+$/, "") + "-" + next, refs: g.model === "gpt-image-2" ? [] : [refOf(g)], parent_id: g.id, preset: g.preset || null}); } catch (e) { toast(e.message, 4000); }
+        break; }
+      case "redo": setKind("video"); source = state.generations.find(x => refOf(x) === g.input_image || x.url === g.input_image || x.path === g.input_image) || {name: "previous still", url: g.input_image, prompt: ""}; $("still").value = g.input_image || ""; if (source.url) renderSource(); setFields(g.fields); if (!g.fields) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true); $("negative").value = g.negative || ""; $("vidModel").value = g.model || "pro"; $("duration").value = (g.params && g.params.duration_s) || 10; $("seed").value = g.seed ?? -1; $("cameraFixed").checked = !!(g.params && g.params.camera_fixed); parentId = g.id; $("create").scrollIntoView({behavior: "smooth"}); toast("Loaded. Change the motion, approve, generate."); break;
+      case "extend": {
+        toast("Capturing the last frame…");
+        try {
+          const dataUrl = await lastFrame(g.url);
+          const up = await uploadDataUrl(dataUrl, (g.name || "clip").replace(/\.[^.]+$/, "") + "-last", "still");
+          setKind("video"); source = {name: up.name, url: up.url, path: up.path, prompt: g.prompt}; renderSource();
+          setFields(g.fields); if (!g.fields) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true);
+          $("vidModel").value = g.model || "pro"; $("seed").value = g.seed ?? -1; parentId = g.id;
+          $("create").scrollIntoView({behavior: "smooth"}); toast("Last frame ready as the source still. Approve and generate to continue the shot.");
+        } catch (e) { toast("Could not capture the frame: " + e.message, 5000); }
+        break; }
+    }
+  }
+  function lastFrame(url) {
+    return new Promise((res, rej) => {
+      const v = document.createElement("video"); v.crossOrigin = "anonymous"; v.muted = true; v.preload = "auto"; v.src = url;
+      v.onerror = () => rej(new Error("video could not be loaded"));
+      v.onloadedmetadata = () => { v.currentTime = Math.max(0, v.duration - 0.05); };
+      v.onseeked = () => { try { const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext("2d").drawImage(v, 0, 0); res(c.toDataURL("image/png")); } catch (e) { rej(new Error("frame is blocked by the video host (CORS)")); } };
+    });
+  }
+  function openModal(items) {
+    $("modalBody").innerHTML = `<div class="pair ${items.length === 1 ? "single" : ""}">` + items.map(g => `<div>${g.kind === "video" ? `<video src="${esc(g.url)}" controls autoplay muted loop></video>` : `<img src="${esc(g.url)}" alt="">`}<div class="cap"><b>${esc(g.name)}</b> · ${esc(g.model || "")} · ${g.usd != null ? fmtUsd(g.usd) : ""}${g.media && g.media.width ? ` · ${g.media.width}x${g.media.height}` : ""}<br>${esc(g.prompt || "")}${g.note ? `<br><i>${esc(g.note)}</i>` : ""}</div></div>`).join("") + `</div>`;
+    $("modal").classList.add("on");
+  }
+  $("modalClose").onclick = () => $("modal").classList.remove("on");
+  $("modal").addEventListener("click", (e) => { if (e.target === $("modal")) $("modal").classList.remove("on"); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").classList.remove("on"); });
+  $("compareBtn").onclick = () => openModal(cmpSel.map(id => state.generations.find(g => g.id === id)).filter(Boolean));
+  $("kindFilter").querySelectorAll("button").forEach(b => b.onclick = () => { filter.kind = b.dataset.f; $("kindFilter").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); renderBoard(); });
+  $("starFilter").onclick = () => { filter.starred = !filter.starred; $("starFilter").classList.toggle("on", filter.starred); renderBoard(); };
+  $("showRejected").onclick = () => { filter.rejected = !filter.rejected; $("showRejected").classList.toggle("on", filter.rejected); renderBoard(); };
+  $("search").addEventListener("input", () => { filter.q = $("search").value.trim(); renderBoard(); });
+
+  loadPresets().then(() => { setKind("image"); load(); });
 })();
 </script>
 </body>

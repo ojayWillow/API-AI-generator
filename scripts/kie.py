@@ -554,7 +554,7 @@ def cmd_video(a: argparse.Namespace) -> None:
                "duration": q["duration_s"], "resolution": "1080p"}
     else:
         inp = {"prompt": a.prompt, "image_url": image_url, "resolution": "1080p",
-               "duration": str(q["duration_s"]), "camera_fixed": bool(a.camera_fixed), "seed": -1}
+               "duration": str(q["duration_s"]), "camera_fixed": bool(a.camera_fixed), "seed": int(a.seed)}
     if q.get("note"):
         log(f"  {q['note']}")
     log(f"Submitting video to {q['model_id']} ({q['duration_s']}s, ~{q['credits_est']} credits / ${q['usd_est']:.2f})")
@@ -562,7 +562,8 @@ def cmd_video(a: argparse.Namespace) -> None:
     task = poll_task(task_id, every=15, timeout=1500)
     name = a.name or (still_local.stem if still_local else f"{dt.datetime.now():%Y%m%d-%H%M%S}-{slugify(a.prompt)}")
     finish("video", task, model, q["model_id"], a.prompt,
-           {"duration_s": q["duration_s"], "resolution": "1080p", "camera_fixed": bool(a.camera_fixed)},
+           {"duration_s": q["duration_s"], "resolution": "1080p", "camera_fixed": bool(a.camera_fixed),
+            "seed": int(a.seed)},
            name, "mp4", q["credits_est"],
            {"input_image": str(still_local or a.image), "input_image_url": image_url, "preset": a.preset})
 
@@ -636,6 +637,7 @@ def main() -> None:
     p.add_argument("--model", choices=["pro", "lite", "2.5"])
     p.add_argument("--duration", type=float)
     p.add_argument("--camera-fixed", action="store_true")
+    p.add_argument("--seed", type=int, default=-1, help="-1 for random; reuse a seed to stay close to a previous clip")
     p.add_argument("--name")
     p.add_argument("--preset")
     p.add_argument("--approve", action="store_true", help="user explicitly approved this paid run")

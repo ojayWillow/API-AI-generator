@@ -64,9 +64,24 @@ generate/
 ## Dashboard
 
 A single page shows your kie.ai credit balance, today's and this month's spend
-against the caps, a per-day spend chart, every still and clip with its prompt
-and cost, and a form that drafts stills, quotes clips, and animates approved
-stills. It runs two ways from the same `public/index.html`:
+against the caps, a per-day spend chart, and a review board of every still and
+clip. The create panel is built for iteration, not single shots:
+
+- **Prompt builder.** Subject, setting, camera, lighting, mood, details (or
+  camera move, subject motion, atmosphere, keep-still for video) compose the
+  final prompt, with the chosen preset's locked fragment and a negative prompt.
+  Presets live in `public/presets.json`.
+- **Variations.** Generate 1 to 4 stills from one prompt at once. They show up
+  as a set; "Pick" stars one and rejects the rest.
+- **Reference images.** Upload faces or products once, select up to three per
+  still, or use any board image as a reference for character consistency.
+- **Review board.** Star, reject, note, search, filter to starred, hide or show
+  rejected, select two and compare side by side, click to view large.
+- **One-click follow-ups.** Animate, Tweak (reload into the builder), Use as
+  ref, 16:9 and 1:1 reframes, a 2K or 4K version, and for clips Redo and Extend
+  (captures the last frame in the browser and uses it as the next source still).
+
+It runs two ways from the same `public/index.html`:
 
 **Locally** (reads your `generations/` folder, runs `kie.py` for you):
 
@@ -88,7 +103,8 @@ live in the cloud and the dashboard works from any device):
    function copies the result into Blob and appends the ledger.
 
 Both modes use the same API: `GET /api/state`, `POST /api/quote`,
-`POST /api/generate`, `GET /api/tasks?id=`.
+`POST /api/generate` (with `count`, `refs`, `negative`, `fields`, `seed`),
+`GET /api/tasks?id=`, `POST /api/item` (rating, note, hidden), `POST /api/upload`.
 
 ## Using the script directly
 
