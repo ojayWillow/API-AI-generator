@@ -86,6 +86,9 @@
   }
   textarea { min-height: 60px; resize: vertical; }
   textarea.final { min-height: 86px; font-size: 13px; }
+  textarea.big { min-height: 110px; font-size: 15px; padding: 12px; }
+  .panel { border-top: 1px solid var(--grid); margin-top: 12px; padding-top: 12px; }
+  button.ghost.open { border-color: var(--series); color: var(--series); }
   .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
   .seg button { background: none; border: none; padding: 6px 12px; color: var(--ink-2); cursor: pointer; font: inherit; }
   .seg button.on { background: var(--series); color: #fff; }
@@ -103,6 +106,7 @@
   .create-head select { width: auto; min-width: 220px; }
   .preset-frag { font-size: 12px; color: var(--muted); margin: -4px 0 10px; }
   .source { display: flex; gap: 10px; align-items: center; border: 1px dashed var(--border); border-radius: 8px; padding: 8px; margin-bottom: 10px; min-height: 64px; }
+  .source .x { margin-left: auto; }
   .source img { width: 44px; height: 60px; object-fit: cover; border-radius: 4px; background: var(--page); }
   .source .muted { color: var(--muted); font-size: 12px; }
   .refs { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
@@ -179,80 +183,76 @@
       <select id="preset"><option value="">No preset</option></select>
       <span class="sub" id="createHint"></span>
     </div>
-    <div class="preset-frag" id="presetFrag"></div>
     <form id="form" autocomplete="off">
-      <div class="grid cols">
-        <div>
-          <div id="imageBuilder">
-            <div class="row">
-              <div><label for="f_subject">Subject (who or what)</label><input type="text" id="f_subject" placeholder="a Roman senator waking up"></div>
-              <div><label for="f_setting">Setting</label><input type="text" id="f_setting" placeholder="marble villa bedroom at dawn"></div>
-            </div>
-            <div class="row three">
-              <div><label for="f_camera">Camera and lens</label><input type="text" id="f_camera" placeholder="35mm, eye level"></div>
-              <div><label for="f_light">Lighting</label><input type="text" id="f_light" placeholder="warm sunlight through columns"></div>
-              <div><label for="f_mood">Mood and style</label><input type="text" id="f_mood" placeholder="cinematic, photoreal"></div>
-            </div>
-            <div class="row one"><div><label for="f_details">Extra details</label><input type="text" id="f_details" placeholder="silk sheets, a toga folded on a chair"></div></div>
+      <div class="source hidden" id="source"></div>
+      <textarea id="prompt" class="final big" placeholder="Describe the shot. Example: a Roman senator waking up in a marble villa at dawn, first-person POV, warm light, no text"></textarea>
+      <div class="preset-frag" id="presetFrag"></div>
+      <div class="actions">
+        <button type="submit" class="primary" id="goBtn">Generate image</button>
+        <button type="button" class="ghost" id="quoteBtn">Quote</button>
+        <label class="check hidden" id="approveWrap"><input type="checkbox" id="approve"> I approve this paid run</label>
+        <button type="button" class="ghost" id="helperBtn">Prompt helper</button>
+        <button type="button" class="ghost" id="optionsBtn">Options</button>
+        <button type="button" class="linkbtn" id="clearBtn">clear</button>
+        <span class="sub" id="formMsg"></span>
+      </div>
+      <div class="quote" id="quote"></div>
+
+      <div class="panel hidden" id="helperPanel">
+        <div id="imageBuilder">
+          <div class="row">
+            <div><label for="f_subject">Subject (who or what)</label><input type="text" id="f_subject" placeholder="a Roman senator waking up"></div>
+            <div><label for="f_setting">Setting</label><input type="text" id="f_setting" placeholder="marble villa bedroom at dawn"></div>
           </div>
-          <div id="videoBuilder" class="hidden">
-            <div class="row">
-              <div><label for="m_camera">Camera move</label><input type="text" id="m_camera" placeholder="slow push-in"></div>
-              <div><label for="m_subject">Subject motion</label><input type="text" id="m_subject" placeholder="hands lift slightly, head turns to the window"></div>
-            </div>
-            <div class="row">
-              <div><label for="m_atmo">Atmosphere</label><input type="text" id="m_atmo" placeholder="curtains move, dust in the light"></div>
-              <div><label for="m_keep">Keep still</label><input type="text" id="m_keep" placeholder="keep the sign readable, face stays in frame"></div>
-            </div>
+          <div class="row three">
+            <div><label for="f_camera">Camera and lens</label><input type="text" id="f_camera" placeholder="35mm, eye level"></div>
+            <div><label for="f_light">Lighting</label><input type="text" id="f_light" placeholder="warm sunlight through columns"></div>
+            <div><label for="f_mood">Mood and style</label><input type="text" id="f_mood" placeholder="cinematic, photoreal"></div>
           </div>
-          <div class="row one">
-            <div><label for="prompt">Final prompt <button type="button" class="linkbtn" id="rebuild">rebuild from fields</button></label><textarea id="prompt" class="final"></textarea></div>
+          <div class="row one"><div><label for="f_details">Extra details</label><input type="text" id="f_details" placeholder="silk sheets, a toga folded on a chair"></div></div>
+        </div>
+        <div id="videoBuilder" class="hidden">
+          <div class="row">
+            <div><label for="m_camera">Camera move</label><input type="text" id="m_camera" placeholder="slow push-in"></div>
+            <div><label for="m_subject">Subject motion</label><input type="text" id="m_subject" placeholder="hands lift slightly, head turns to the window"></div>
           </div>
-          <div class="row one">
-            <div><label for="negative">Avoid (negative prompt)</label><input type="text" id="negative" placeholder="text, watermark, logo"></div>
+          <div class="row">
+            <div><label for="m_atmo">Atmosphere</label><input type="text" id="m_atmo" placeholder="curtains move, dust in the light"></div>
+            <div><label for="m_keep">Keep still</label><input type="text" id="m_keep" placeholder="keep the sign readable, face stays in frame"></div>
           </div>
         </div>
+        <div class="sub">The fields write into the text box above. <button type="button" class="linkbtn" id="rebuild">Rebuild the text from the fields</button></div>
+      </div>
 
-        <div>
-          <div id="imageOptions">
-            <div class="row three">
-              <div><label for="imgModel">Model</label><select id="imgModel"><option value="nano-banana-2">nano-banana-2</option><option value="gpt-image-2">gpt-image-2 (text)</option></select></div>
-              <div><label for="aspect">Aspect</label><select id="aspect"><option>9:16</option><option>16:9</option><option>1:1</option><option>4:5</option><option>auto</option></select></div>
-              <div><label for="resolution">Resolution</label><select id="resolution"><option>1K</option><option>2K</option><option>4K</option></select></div>
-            </div>
-            <div class="row">
-              <div><label>Variations</label><div class="seg" id="countSeg"><button type="button" data-n="1" class="on">1</button><button type="button" data-n="2">2</button><button type="button" data-n="3">3</button><button type="button" data-n="4">4</button></div></div>
-              <div><label for="imgName">File name (optional)</label><input type="text" id="imgName" placeholder="roman-senator"></div>
-            </div>
-            <h3>Reference images <span class="sub" id="refHint">(up to 3, nano-banana-2 only)</span></h3>
-            <div class="refs" id="refs"></div>
-            <input type="file" id="refFile" accept="image/*" multiple class="hidden">
+      <div class="panel hidden" id="optionsPanel">
+        <div class="row one"><div><label for="negative">Avoid (negative prompt)</label><input type="text" id="negative" placeholder="text, watermark, logo"></div></div>
+        <div id="imageOptions">
+          <div class="row three">
+            <div><label for="imgModel">Model</label><select id="imgModel"><option value="nano-banana-2">nano-banana-2</option><option value="gpt-image-2">gpt-image-2 (text)</option></select></div>
+            <div><label for="aspect">Aspect</label><select id="aspect"><option>9:16</option><option>16:9</option><option>1:1</option><option>4:5</option><option>auto</option></select></div>
+            <div><label for="resolution">Resolution</label><select id="resolution"><option>1K</option><option>2K</option><option>4K</option></select></div>
           </div>
-
-          <div id="videoOptions" class="hidden">
-            <h3>Source still</h3>
-            <div class="source" id="source"><span class="muted">Click Animate on an image in the board, or paste a URL below.</span></div>
-            <div class="row one"><div><input type="text" id="still" placeholder="https://... or a file name from the board"></div></div>
-            <div class="row three">
-              <div><label for="vidModel">Model</label><select id="vidModel"><option value="pro">pro (default)</option><option value="lite">lite (budget)</option><option value="2.5">2.5</option></select></div>
-              <div><label for="duration">Duration (s)</label><input type="number" id="duration" value="10" min="2" max="15" step="1"></div>
-              <div><label for="seed">Seed (-1 random)</label><input type="number" id="seed" value="-1" step="1"></div>
-            </div>
-            <div class="row">
-              <div><label for="vidName">File name (optional)</label><input type="text" id="vidName"></div>
-              <div style="padding-top:18px"><label class="check"><input type="checkbox" id="cameraFixed"> Camera fixed</label></div>
-            </div>
-            <label class="check" style="margin-bottom:8px"><input type="checkbox" id="approve"> I approve this paid run</label>
+          <div class="row">
+            <div><label>Variations</label><div class="seg" id="countSeg"><button type="button" data-n="1" class="on">1</button><button type="button" data-n="2">2</button><button type="button" data-n="3">3</button><button type="button" data-n="4">4</button></div></div>
+            <div><label for="imgName">File name (optional)</label><input type="text" id="imgName" placeholder="roman-senator"></div>
           </div>
-          <label class="check"><input type="checkbox" id="overrideCap"> Override spend cap for this run</label>
-          <div class="quote" id="quote"></div>
-          <div class="actions">
-            <button type="button" class="ghost" id="quoteBtn">Quote</button>
-            <button type="submit" class="primary" id="goBtn">Generate image</button>
-            <button type="button" class="ghost" id="clearBtn">Clear</button>
-            <span class="sub" id="formMsg"></span>
+          <h3>Reference images <span class="sub" id="refHint">(up to 3, nano-banana-2 only)</span></h3>
+          <div class="refs" id="refs"></div>
+          <input type="file" id="refFile" accept="image/*" multiple class="hidden">
+        </div>
+        <div id="videoOptions" class="hidden">
+          <div class="row one"><div><label for="still">Source still (URL or a file name from the board)</label><input type="text" id="still" placeholder="https://..."></div></div>
+          <div class="row three">
+            <div><label for="vidModel">Model</label><select id="vidModel"><option value="pro">pro (default)</option><option value="lite">lite (budget)</option><option value="2.5">2.5</option></select></div>
+            <div><label for="duration">Duration (s)</label><input type="number" id="duration" value="10" min="2" max="15" step="1"></div>
+            <div><label for="seed">Seed (-1 random)</label><input type="number" id="seed" value="-1" step="1"></div>
+          </div>
+          <div class="row">
+            <div><label for="vidName">File name (optional)</label><input type="text" id="vidName"></div>
+            <div style="padding-top:18px"><label class="check"><input type="checkbox" id="cameraFixed"> Camera fixed</label></div>
           </div>
         </div>
+        <label class="check"><input type="checkbox" id="overrideCap"> Override spend cap for this run</label>
       </div>
     </form>
   </section>
@@ -399,7 +399,7 @@
   function preset() { return presets[$("preset").value] || null; }
   function applyPreset() {
     const p = preset();
-    $("presetFrag").textContent = p ? (kind === "image" ? "Locked still fragment: " + p.still : "Locked motion fragment: " + p.motion) : "";
+    $("presetFrag").textContent = p ? "Preset adds: " + (kind === "image" ? p.still : p.motion) : "";
     if (!p) { compose(); return; }
     if (p.aspect) $("aspect").value = p.aspect;
     if (p.image_model) $("imgModel").value = p.image_model;
@@ -435,16 +435,23 @@
     kind = k;
     $("kindImage").classList.toggle("on", k === "image"); $("kindVideo").classList.toggle("on", k === "video");
     ["imageBuilder", "imageOptions"].forEach(id => $(id).classList.toggle("hidden", k !== "image"));
-    ["videoBuilder", "videoOptions"].forEach(id => $(id).classList.toggle("hidden", k !== "video"));
+    ["videoBuilder", "videoOptions", "approveWrap"].forEach(id => $(id).classList.toggle("hidden", k !== "video"));
     $("goBtn").textContent = k === "image" ? (count > 1 ? `Generate ${count} variations` : "Generate image") : "Generate video";
-    $("createHint").textContent = k === "image" ? "Stills are cheap: make variations, pick the best, then animate." : "One paid run per approval. Clips inherit the still's size.";
-    $("quote").textContent = ""; manualPrompt = false; applyPreset(); updateGo();
+    $("createHint").textContent = k === "image" ? "Stills cost about 4 cents each." : "One paid run per approval. The clip takes the still's size.";
+    $("prompt").placeholder = k === "image"
+      ? "Describe the shot. Example: a Roman senator waking up in a marble villa at dawn, first-person POV, warm light, no text"
+      : "Describe the motion. Example: slow push-in, curtains move in the breeze, keep the face in frame";
+    $("quote").textContent = ""; manualPrompt = false; applyPreset(); renderSource(); updateGo();
   }
+  function togglePanel(id, btn) { const open = $(id).classList.toggle("hidden") === false; $(btn).classList.toggle("open", open); return open; }
+  $("helperBtn").onclick = () => togglePanel("helperPanel", "helperBtn");
+  $("optionsBtn").onclick = () => togglePanel("optionsPanel", "optionsBtn");
+  function openPanel(id, btn) { $(id).classList.remove("hidden"); $(btn).classList.add("open"); }
   function updateGo() { $("goBtn").disabled = kind === "video" && !$("approve").checked; }
   $("kindImage").onclick = () => setKind("image"); $("kindVideo").onclick = () => setKind("video");
   $("approve").onchange = updateGo;
   $("countSeg").querySelectorAll("button").forEach(b => b.onclick = () => { count = +b.dataset.n; $("countSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); $("goBtn").textContent = count > 1 ? `Generate ${count} variations` : "Generate image"; $("quote").textContent = ""; });
-  $("clearBtn").onclick = () => { $("form").reset(); refSel.length = 0; source = null; parentId = null; count = 1; $("countSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x.dataset.n === "1")); manualPrompt = false; applyPreset(); renderSource(); renderRefs(); $("quote").textContent = ""; $("formMsg").textContent = ""; updateGo(); };
+  $("clearBtn").onclick = () => { $("form").reset(); refSel.length = 0; source = null; parentId = null; count = 1; $("countSeg").querySelectorAll("button").forEach(x => x.classList.toggle("on", x.dataset.n === "1")); manualPrompt = false; applyPreset(); renderSource(); renderRefs(); $("quote").textContent = ""; $("formMsg").textContent = ""; $("goBtn").textContent = kind === "image" ? "Generate image" : "Generate video"; updateGo(); };
 
   // ---------- references ----------
   function renderRefs() {
@@ -491,11 +498,13 @@
   // ---------- video source ----------
   function renderSource() {
     const host = $("source");
-    if (!source) { host.innerHTML = `<span class="muted">Click Animate on an image in the board, or paste a URL below.</span>`; return; }
-    host.innerHTML = `<img src="${esc(source.url)}" alt=""><div><div>${esc(source.name)}</div><div class="muted">${esc((source.prompt || "").slice(0, 80))}</div></div>`;
+    if (kind !== "video" || !source) { host.classList.add("hidden"); host.innerHTML = ""; return; }
+    host.classList.remove("hidden");
+    host.innerHTML = `<img src="${esc(source.url)}" alt=""><div><div>Source still: ${esc(source.name)}</div><div class="muted">${esc((source.prompt || "").slice(0, 80))}</div></div><button type="button" class="ghost small x" id="sourceClear">change</button>`;
     $("still").value = refOf(source);
+    $("sourceClear").onclick = () => { source = null; $("still").value = ""; renderSource(); openPanel("optionsPanel", "optionsBtn"); $("still").focus(); };
   }
-  $("still").addEventListener("input", () => { source = null; renderSource(); $("still").focus(); });
+  $("still").addEventListener("input", () => { source = null; renderSource(); });
 
   // ---------- generate ----------
   function payload() {
@@ -594,9 +603,9 @@
       case "cmp": { const i = cmpSel.indexOf(g.id); if (i >= 0) cmpSel.splice(i, 1); else { if (cmpSel.length >= 2) cmpSel.shift(); cmpSel.push(g.id); } $("compareBtn").classList.toggle("hidden", cmpSel.length !== 2); renderBoard(); break; }
       case "pick": { const sibs = state.generations.filter(x => x.group === g.group && x.id !== g.id); await setItem(g, {rating: "star", hidden: false}); for (const s of sibs) if (s.rating !== "star") await setItem(s, {rating: "reject", hidden: true}); toast("Picked. Siblings rejected."); break; }
       case "copy": try { await navigator.clipboard.writeText(g.path); toast("Path copied"); } catch { prompt("Path", g.path); } break;
-      case "animate": setKind("video"); source = g; parentId = g.id; renderSource(); if (g.fields && g.kind === "image") {} $("create").scrollIntoView({behavior: "smooth"}); $("m_camera").focus(); break;
-      case "tweak": setKind("image"); $("preset").value = g.preset || ""; applyPreset(); setFields(g.fields); if (!g.fields || !g.fields.subject) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true); $("negative").value = g.negative || ""; if (g.params) { if (g.params.aspect_ratio) $("aspect").value = g.params.aspect_ratio; if (g.params.resolution) $("resolution").value = g.params.resolution; } if (g.model) $("imgModel").value = g.model; refSel.length = 0; (g.refs || []).forEach(r => refSel.push({ref: r, url: r, name: r.split("/").pop()})); parentId = g.id; renderRefs(); $("create").scrollIntoView({behavior: "smooth"}); toast("Loaded into the builder. Adjust and generate."); break;
-      case "ref": toggleRef({ref: refOf(g), url: g.url, name: g.name, path: g.path || null}); setKind("image"); toast("Added as a reference image."); break;
+      case "animate": setKind("video"); source = g; parentId = g.id; renderSource(); $("create").scrollIntoView({behavior: "smooth"}); $("prompt").focus(); break;
+      case "tweak": setKind("image"); $("preset").value = g.preset || ""; applyPreset(); setFields(g.fields); if (!g.fields || !g.fields.subject) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else { compose(true); openPanel("helperPanel", "helperBtn"); } $("negative").value = g.negative || ""; if (g.params) { if (g.params.aspect_ratio) $("aspect").value = g.params.aspect_ratio; if (g.params.resolution) $("resolution").value = g.params.resolution; } if (g.model) $("imgModel").value = g.model; refSel.length = 0; (g.refs || []).forEach(r => refSel.push({ref: r, url: r, name: r.split("/").pop()})); if (refSel.length) openPanel("optionsPanel", "optionsBtn"); parentId = g.id; renderRefs(); $("create").scrollIntoView({behavior: "smooth"}); toast("Loaded. Edit the text and generate."); break;
+      case "ref": toggleRef({ref: refOf(g), url: g.url, name: g.name, path: g.path || null}); setKind("image"); openPanel("optionsPanel", "optionsBtn"); toast("Added as a reference image."); break;
       case "reframe169": case "reframe11": {
         const aspect = a === "reframe169" ? "16:9" : "1:1";
         toast(`Generating ${aspect} version…`);
