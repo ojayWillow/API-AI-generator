@@ -1,0 +1,7 @@
+generations/
+.env
+.claude/
+scripts/
+models/
+presets/
+SKILL.md

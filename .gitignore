@@ -1,0 +1,4 @@
+.env
+generations/
+__pycache__/
+.claude/

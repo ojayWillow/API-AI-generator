@@ -1,0 +1,30 @@
+{
+  "_note": "Estimated kie.ai credits per run. 1 credit = $0.005 ($5 per 1,000). The ledger records the real creditsConsumed after each job. Verify current rates at https://kie.ai/pricing and edit here.",
+  "image": {
+    "nano-banana-2": {
+      "id": "nano-banana-2",
+      "credits": { "1K": 8, "2K": 10, "4K": 14 }
+    },
+    "gpt-image-2": {
+      "id": "gpt-image-2-text-to-image",
+      "credits": { "1K": 10, "2K": 12, "4K": 16 }
+    }
+  },
+  "video": {
+    "pro": {
+      "id": "bytedance/v1-pro-image-to-video",
+      "credits_per_second": 14,
+      "durations": [5, 10]
+    },
+    "lite": {
+      "id": "bytedance/v1-lite-image-to-video",
+      "credits_per_second": 10,
+      "durations": [5, 10]
+    },
+    "2.5": {
+      "id": "bytedance/seedance-2-5",
+      "credits_per_second": 20,
+      "durations": [4, 5, 6, 8, 10, 12]
+    }
+  }
+}
