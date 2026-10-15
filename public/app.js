@@ -1,5 +1,5 @@
 (() => {
-  const BRAND = "Reik Studio";   // change the name here
+  const BRAND = "API AI generator";   // change the name here
   const $ = (id) => document.getElementById(id);
   const fmtUsd = (v) => "$" + (Number(v) || 0).toFixed(2);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
