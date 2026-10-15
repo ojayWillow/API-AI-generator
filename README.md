@@ -26,13 +26,13 @@ Requirements: Python 3.9+ (standard library only), a kie.ai API key with a few
 dollars of credit. ffmpeg is optional (frame extraction for QA).
 
 ```bash
-git clone https://github.com/ojayWillow/claude-generate-skill ~/.claude/skills/generate
+git clone https://github.com/ojayWillow/API-AI-generator ~/.claude/skills/generate
 ```
 
 On Windows PowerShell:
 
 ```powershell
-git clone https://github.com/ojayWillow/claude-generate-skill "$env:USERPROFILE\.claude\skills\generate"
+git clone https://github.com/ojayWillow/API-AI-generator "$env:USERPROFILE\.claude\skills\generate"
 ```
 
 Then:
