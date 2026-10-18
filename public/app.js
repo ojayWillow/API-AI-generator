@@ -477,7 +477,7 @@
       const c = charById(b.closest(".ccard").dataset.id); if (!c) return;
       if (b.dataset.c === "edit") return openEditor(c);
       if (!castSel.includes(c.id)) castSel.push(c.id);
-      if (b.dataset.c === "still") { setKind("image"); $("imgModel").value = "nano-banana-2"; } else { setKind("video"); vmode = "reference"; applyVMode(); }
+      if (b.dataset.c === "still") { setKind("image"); $("imgModel").value = "nano-banana-2"; renderRefs(); estimate(); } else { setKind("video"); vmode = "reference"; applyVMode(); }
       manualPrompt = true; if (!$("prompt").value.includes("@" + c.tag)) $("prompt").value = `@${c.tag} ` + $("prompt").value;
       renderCastPick(); toCreate(); $("prompt").focus();
     });
@@ -517,7 +517,7 @@
     if (kind === "video" && vmode !== "reference" && !(p.image || "").trim()) { $("formMsg").textContent = "Add a start frame first."; return; }
     if (kind === "video" && vmode === "first-last" && !(p.end_image || "").trim()) { $("formMsg").textContent = "Add an end frame first."; return; }
     if (kind === "video" && vmode === "reference" && !p.characters.length && !p.refs.length && !p.ref_video) { $("formMsg").textContent = "Pick a character, a reference image or a clip."; return; }
-    if (kind === "video" && vmode === "reference" && p.ref_video && !(p.ref_video_s > 0)) { $("formMsg").textContent = "The reference clip's length is unknown, so it can't be priced. Remove it or pick another clip."; return; }
+    if (kind === "video" && vmode === "reference" && p.ref_video && !(p.ref_video_s > 0) && state.mode === "vercel") { $("formMsg").textContent = "The reference clip's length is unknown, so it can't be priced. Remove it or pick another clip."; return; }
     $("formMsg").textContent = "Submitting…"; $("goBtn").disabled = true;
     try { const js = await submit(p); $("formMsg").textContent = js.length > 1 ? `${js.length} started.` : "Started."; $("approve").checked = false; parentId = null; showView("create"); }
     catch (e) { $("formMsg").textContent = e.message; }
@@ -733,6 +733,7 @@
         const secs = (g.media && g.media.duration_s) || (g.params && g.params.duration_s) || 0;
         if (secs > 15) toast("Long clip: kie.ai caps reference clips at 30 s in total, and every second is billed.", 5000);
         refVideo = {ref: refOf(g), url: g.url, name: g.name, seconds: secs};
+        if (!secs) clipSeconds(g.url).then(s => { if (refVideo && refVideo.url === g.url && s) { refVideo.seconds = s; renderRefVideo(); estimate(); } });
         restoreCast(g); refSel.length = 0;
         manualPrompt = true; $("prompt").value = "Continue @Video1 seamlessly from its final frame, same camera and lighting. Next: ";
         settings.vres = "480p"; settings.duration = (g.params && g.params.duration_s) || 10;
@@ -798,6 +799,9 @@
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
       toast(`Saved ${name} to your downloads`);
     } catch { window.open(g.url, "_blank", "noopener"); toast("Opened in a new tab. Use Save as, or long-press on a phone.", 6000); }
+  }
+  function clipSeconds(url) {
+    return new Promise(res => { const v = document.createElement("video"); v.preload = "metadata"; v.muted = true; v.onloadedmetadata = () => res(isFinite(v.duration) ? Math.round(v.duration * 100) / 100 : 0); v.onerror = () => res(0); v.src = url; });
   }
   function lastFrame(url) {
     return new Promise((res, rej) => {

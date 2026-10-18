@@ -347,7 +347,8 @@ def photos_per_character(chars: list[dict], n_refs: int, cap: int) -> int:
     """How many photos each character can send so characters + extra refs fit under the model's cap."""
     if not chars:
         return MAX_CHAR_IMAGES
-    per = min(MAX_CHAR_IMAGES, (cap - n_refs) // len(chars))
+    sent = lambda k: sum(min(len(c.get("images") or []), k) for c in chars) + n_refs
+    per = next((k for k in range(MAX_CHAR_IMAGES, 0, -1) if sent(k) <= cap), 0)  # trim only what doesn't fit
     if per < 1:
         raise ApiError(f"too many references: {len(chars)} characters plus {n_refs} images, the model takes {cap}")
     return per
