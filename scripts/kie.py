@@ -10,10 +10,14 @@ Commands
   credits                                   remaining kie.ai credits
   quote    --kind image|video --model M [--duration N] [--resolution R]
   image    --prompt P [--model nano-banana-2|gpt-image-2] [--aspect 9:16]
-           [--resolution 1K|2K|4K] [--ref URL_OR_PATH ...] [--name slug]
+           [--resolution 1K|2K|4K] [--ref URL_OR_PATH ...] [--character ID ...] [--name slug]
   upload   --file PATH                      host a local file on kie.ai (24 h)
-  video    --image PATH_OR_URL --prompt P [--model 2.5|pro|lite] [--draft]
-           [--resolution 480p|720p|1080p] [--duration N] [--name slug] --approve
+  video    --prompt P [--model 2.5|pro|lite] [--draft] [--resolution 480p|720p|1080p]
+           [--duration N] [--name slug] --approve, plus one of three Seedance 2.5 modes:
+             --mode first       --image START            (default; the only mode for pro/lite)
+             --mode first-last  --image START --end-image END
+             --mode reference   [--character ID ...] [--ref IMG ...] [--ref-video MP4]
+  characters list | add --name N --image P [--image P ...] [--description D] | remove --id ID
   finalize --draft-task-id ID --approve      render a 2.5 draft at 1080p
   status   --task-id ID
   ledger   [--all]                          spend summary (today / month)
@@ -174,6 +178,72 @@ def ext_from_url(url: str, default: str) -> str:
 # ---------------------------------------------------------------------------
 # ledger
 # ---------------------------------------------------------------------------
+def characters_path() -> Path:
+    return gen_dir() / "characters.json"
+
+
+def read_characters() -> list[dict]:
+    p = characters_path()
+    if not p.exists():
+        return []
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    return [c for c in data if isinstance(c, dict)] if isinstance(data, list) else []
+
+
+def write_characters(chars: list[dict]) -> None:
+    characters_path().write_text(json.dumps(chars, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def find_character(key: str) -> dict:
+    k = (key or "").strip().lstrip("@").lower()
+    for c in read_characters():
+        if k in (str(c.get("id", "")).lower(), str(c.get("tag", "")).lower(), str(c.get("name", "")).lower()):
+            return c
+    die(f"unknown character '{key}'. Run: kie.py characters list")
+
+
+MAX_CHAR_IMAGES = 4  # per character; the first images hold identity best
+
+
+def cast_prompt(prompt: str, chars: list[dict], first_index: int, video_tags: bool) -> str:
+    """Bind each character to its reference images and keep identity locked.
+
+    Seedance 2.5 addresses reference images as @Image1..@ImageN by position, so
+    "@reiks" in the prompt becomes "Reiks (@Image1 @Image2)". Nano Banana has no
+    tag syntax, so images are named by number instead. Same logic as api/index.py.
+    """
+    if not chars:
+        return prompt
+    lines, idx = [], first_index
+    for c in chars:
+        n = min(len(c.get("images") or []), MAX_CHAR_IMAGES)
+        nums = list(range(idx, idx + n))
+        label = " ".join(f"@Image{i}" for i in nums) if video_tags else \
+            ("reference image " if n == 1 else "reference images ") + ", ".join(str(i) for i in nums)
+        name = c.get("name") or c.get("tag") or "character"
+        tag = c.get("tag") or ""
+        if tag:
+            prompt = re.sub(r"@" + re.escape(tag) + r"\b", name, prompt, flags=re.IGNORECASE)
+        desc = (c.get("description") or "").strip().rstrip(".")
+        lines.append(f"{name} is shown in {label}" + (f": {desc}." if desc else "."))
+        idx += n
+    lock = "Keep every character's face, hair, skin tone, build and outfit identical to their reference images."
+    body = prompt.strip()
+    if body and body[-1] not in ".!?":
+        body += "."
+    return " ".join(lines) + " " + body + " " + lock
+
+
+def character_images(chars: list[dict]) -> list[str]:
+    out = []
+    for c in chars:
+        out += [str(i) for i in (c.get("images") or [])[:MAX_CHAR_IMAGES]]
+    return out
+
+
 def ledger_path() -> Path:
     return gen_dir() / "ledger.json"
 
@@ -393,13 +463,36 @@ def poll_task(task_id: str, every: int, timeout: int) -> dict:
         time.sleep(every)
 
 
+def upload_stream(path: Path, mime: str) -> str:
+    """Multipart upload for files over the 10 MB base64 limit (clips used as reference video)."""
+    boundary = "----kie" + os.urandom(8).hex()
+    parts = []
+    for k, v in (("uploadPath", "generate-skill"), ("fileName", path.name)):
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{path.name}"\r\n'
+                 f"Content-Type: {mime}\r\n\r\n".encode() + path.read_bytes() + b"\r\n")
+    parts.append(f"--{boundary}--\r\n".encode())
+    req = urllib.request.Request(UPLOAD_API + "/api/file-stream-upload", data=b"".join(parts), method="POST",
+                                 headers={"Authorization": f"Bearer {api_key()}",
+                                          "Content-Type": f"multipart/form-data; boundary={boundary}"})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            res = json.loads(r.read().decode("utf-8"))
+    except (urllib.error.URLError, json.JSONDecodeError) as e:
+        die(f"stream upload failed: {e}")
+    url = (res.get("data") or {}).get("downloadUrl")
+    if res.get("code") != 200 or not url:
+        die(f"upload failed: {res.get('msg') or res}", response=res)
+    return url
+
+
 def upload_file(path: Path) -> str:
     """Host a local file on kie.ai for 24 h and return its public URL."""
     if not path.exists():
         die(f"file not found: {path}")
-    if path.stat().st_size > 10 * 1024 * 1024:
-        die("upload is limited to 10 MB for base64 uploads; shrink the image first")
     mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+    if path.stat().st_size > 10 * 1024 * 1024:
+        return upload_stream(path, mime)
     b64 = base64.b64encode(path.read_bytes()).decode("ascii")
     r = kie("POST", "/api/file-base64-upload",
             {"base64Data": f"data:{mime};base64,{b64}", "uploadPath": "generate-skill",
@@ -447,18 +540,25 @@ def video_resolution(model: str, requested: str | None) -> str:
     return pr.get("default_resolution") or allowed[-1]
 
 
-def quote_video(model: str, duration: float, resolution: str | None = None) -> dict:
+def quote_video(model: str, duration: float, resolution: str | None = None, ref_video_s: float = 0) -> dict:
     pr = load_pricing()["video"]
     if model not in pr:
         die(f"unknown video model '{model}'. Options: {', '.join(pr)}")
     dur, note = normalise_duration(model, duration)
     res = video_resolution(model, resolution)
     rate = pr[model]["credits_per_second"]
+    billed = dur
+    if ref_video_s and pr[model].get("credits_per_second_with_video"):
+        # kie.ai bills reference-video seconds plus output seconds at a lower rate
+        rate = pr[model]["credits_per_second_with_video"]
+        billed = dur + float(ref_video_s)
     if isinstance(rate, dict):
         rate = rate.get(res) or max(rate.values())
-    credits = int(rate * dur)
+    credits = int(round(rate * billed))
     q = {"kind": "video", "model": model, "model_id": pr[model]["id"], "duration_s": dur,
          "resolution": res, "credits_est": credits, "usd_est": round(credits * USD_PER_CREDIT, 4)}
+    if ref_video_s:
+        q["ref_video_s"] = round(float(ref_video_s), 2)
     if note:
         q["note"] = note
     return q
@@ -495,7 +595,7 @@ def cmd_quote(a: argparse.Namespace) -> None:
     elif a.kind == "final":
         q = quote_final(a.duration or 10)
     else:
-        q = quote_video(a.model or "2.5", a.duration or 10, a.resolution)
+        q = quote_video(a.model or "2.5", a.duration or 10, a.resolution, a.ref_video_seconds or 0)
     out({"ok": True, **q, "spend": spend_summary()})
 
 
@@ -504,7 +604,7 @@ def finish(kind: str, task: dict, model_key: str, model_id: str, prompt: str, pa
     urls = task["_result"].get("resultUrls") or []
     if not urls:
         die("task succeeded but returned no resultUrls", task=task)
-    src = urls[0]
+    src, last_frame = split_result(task["_result"], urls, kind)
     dest = gen_dir() / f"{name}.{ext_from_url(src, default_ext)}"
     i = 1
     while dest.exists():
@@ -513,6 +613,13 @@ def finish(kind: str, task: dict, model_key: str, model_id: str, prompt: str, pa
     log(f"  downloading -> {dest}")
     download(src, dest)
     info = inspect_file(dest)
+    if last_frame:
+        lf = dest.with_name(f"{dest.stem}.last.{ext_from_url(last_frame, 'png')}")
+        try:
+            download(last_frame, lf)
+            extra = {**extra, "last_frame": lf.name}
+        except (urllib.error.URLError, OSError) as e:
+            log(f"  could not save the last frame: {e}")
     consumed = task.get("creditsConsumed")
     credits = float(consumed) if consumed is not None else float(est_credits)
     entry = {
@@ -530,27 +637,57 @@ def finish(kind: str, task: dict, model_key: str, model_id: str, prompt: str, pa
          "spend": spend_summary()})
 
 
+VIDEO_EXTS = {"mp4", "mov", "webm"}
+
+
+def split_result(res: dict, urls: list[str], kind: str) -> tuple[str, str | None]:
+    """Pick the main output and, for Seedance 2.5 with return_last_frame, the last-frame image.
+
+    kie.ai does not document where the last frame lands, so look for a key that
+    names it and fall back to an image URL next to the video in resultUrls.
+    """
+    if kind != "video":
+        return urls[0], None
+    vids = [u for u in urls if ext_from_url(u, "") in VIDEO_EXTS]
+    src = vids[0] if vids else urls[0]
+    last = None
+    for k, v in res.items():
+        if isinstance(v, str) and v.startswith("http") and "last" in k.lower() and "frame" in k.lower():
+            last = v
+    if not last:
+        imgs = [u for u in urls if u != src and ext_from_url(u, "") in {"png", "jpg", "jpeg", "webp"}]
+        last = imgs[0] if imgs else None
+    return src, last
+
+
 def cmd_image(a: argparse.Namespace) -> None:
     model = a.model or "nano-banana-2"
     resolution = a.resolution or "1K"
     aspect = a.aspect or "9:16"
     q = quote_image(model, resolution)
     enforce_caps(q["usd_est"], a.override_cap)
-    refs = [ensure_url(r) for r in (a.ref or [])]
+    chars = [find_character(c) for c in (a.character or [])]
+    if chars and model != "nano-banana-2":
+        log("  note: characters need reference images; switching to nano-banana-2")
+        model = "nano-banana-2"
+        q = quote_image(model, resolution)
+    prompt = cast_prompt(a.prompt, chars, 1, video_tags=False)
+    refs = [ensure_url(r) for r in character_images(chars) + (a.ref or [])]
     if model == "nano-banana-2":
-        inp = {"prompt": a.prompt, "image_input": refs, "aspect_ratio": aspect,
+        inp = {"prompt": prompt, "image_input": refs, "aspect_ratio": aspect,
                "resolution": resolution, "output_format": a.format or "png"}
     else:  # gpt-image-2-text-to-image
         if refs:
             log("  note: gpt-image-2 text-to-image ignores reference images")
-        inp = {"prompt": a.prompt, "aspect_ratio": aspect, "resolution": resolution}
+        inp = {"prompt": prompt, "aspect_ratio": aspect, "resolution": resolution}
     log(f"Submitting image to {q['model_id']} (~{q['credits_est']} credits / ${q['usd_est']:.3f})")
     task_id = create_task(q["model_id"], inp)
     task = poll_task(task_id, every=10, timeout=600)
     name = a.name or f"{dt.datetime.now():%Y%m%d-%H%M%S}-{slugify(a.prompt)}"
     finish("image", task, model, q["model_id"], a.prompt,
            {"aspect_ratio": aspect, "resolution": resolution, "refs": refs},
-           name, "png", q["credits_est"], {"preset": a.preset})
+           name, "png", q["credits_est"],
+           {"preset": a.preset, "characters": [c.get("id") for c in chars] or None, "sent_prompt": prompt if chars else None})
 
 
 def cmd_upload(a: argparse.Namespace) -> None:
@@ -558,44 +695,133 @@ def cmd_upload(a: argparse.Namespace) -> None:
     out({"ok": True, "url": url, "expires": "24h"})
 
 
+def local_or_none(ref: str | None) -> Path | None:
+    return None if not ref or re.match(r"^https?://", ref) else Path(ref).expanduser()
+
+
+def check_still(ref: str, label: str) -> None:
+    p = local_or_none(ref)
+    if p is not None:
+        info = inspect_file(p)
+        if not info.get("width"):
+            die(f"could not read image dimensions from {p}")
+        log(f"  {label}: {info['width']}x{info['height']} ({info.get('orientation')})")
+
+
 def cmd_video(a: argparse.Namespace) -> None:
     model = a.model or "2.5"
+    mode = a.mode or ("first-last" if a.end_image else "reference" if (a.character or a.ref_video) and not a.image else "first")
     if a.draft and model != "2.5":
         die("--draft is a Seedance 2.5 feature")
-    q = quote_video(model, a.duration or 10, "480p" if a.draft else a.resolution)
+    if mode != "first" and model != "2.5":
+        die(f"--mode {mode} is a Seedance 2.5 feature")
+    if mode in ("first", "first-last") and not a.image:
+        die("--image (the start frame) is required for this mode")
+    if mode == "first-last" and not a.end_image:
+        die("--end-image is required for --mode first-last")
+    if mode != "reference" and (a.character or a.ref or a.ref_video):
+        die("characters and references only work with --mode reference; Seedance 2.5 cannot mix them "
+            "with a start frame. Lock the character into the start and end stills instead.")
+    chars = [find_character(c) for c in (a.character or [])]
+    if mode == "reference" and not (chars or a.ref or a.ref_video):
+        die("--mode reference needs at least one --character, --ref or --ref-video")
+
+    ref_video_s = 0.0
+    if a.ref_video:
+        lv = local_or_none(a.ref_video)
+        ref_video_s = a.ref_video_seconds or ((mp4_info(lv) or {}).get("duration_s") if lv else 0) or 0
+        if not ref_video_s:
+            die("could not read the reference video length; pass --ref-video-seconds")
+    q = quote_video(model, a.duration or 10, "480p" if a.draft else a.resolution, ref_video_s)
     s = enforce_caps(q["usd_est"], a.override_cap)
     if not a.approve:
         out({"ok": False, "approval_required": True,
              "message": "Paid video run. Show this quote to the user and rerun with --approve "
                         "after they explicitly say go.",
              **q, "spend": s}, code=2)
-    still_local = None if re.match(r"^https?://", a.image) else Path(a.image).expanduser()
-    if still_local is not None:
-        info = inspect_file(still_local)
-        if not info.get("width"):
-            die(f"could not read image dimensions from {still_local}")
-        log(f"  still: {info['width']}x{info['height']} ({info.get('orientation')})")
-    image_url = ensure_url(a.image)
+
+    prompt, image_url, end_url, refs, video_refs = a.prompt, None, None, [], []
+    if mode in ("first", "first-last"):
+        check_still(a.image, "start frame")
+        image_url = ensure_url(a.image)
+    if mode == "first-last":
+        check_still(a.end_image, "end frame")
+        end_url = ensure_url(a.end_image)
+    if mode == "reference":
+        refs = [ensure_url(r) for r in character_images(chars) + (a.ref or [])]
+        video_refs = [ensure_url(a.ref_video)] if a.ref_video else []
+        prompt = cast_prompt(prompt, chars, 1, video_tags=True)
+
     if model == "2.5":
-        inp = {"prompt": a.prompt, "first_frame_url": image_url, "aspect_ratio": "adaptive",
-               "duration": q["duration_s"], "resolution": q["resolution"], "generate_audio": not a.no_audio,
-               "output_format": "mp4"}
+        inp = {"prompt": prompt, "duration": q["duration_s"], "resolution": q["resolution"],
+               "generate_audio": not a.no_audio, "output_format": "mp4", "return_last_frame": True}
+        if mode == "reference":
+            inp["aspect_ratio"] = a.aspect or "9:16"
+            if refs:
+                inp["reference_image_urls"] = refs
+            if video_refs:
+                inp["reference_video_urls"] = video_refs
+        else:
+            inp["first_frame_url"] = image_url
+            inp["aspect_ratio"] = "adaptive"
+            if end_url:
+                inp["last_frame_url"] = end_url
         if a.draft:
             inp["draft"] = True
     else:
-        inp = {"prompt": a.prompt, "image_url": image_url, "resolution": "1080p",
+        inp = {"prompt": prompt, "image_url": image_url, "resolution": "1080p",
                "duration": str(q["duration_s"]), "camera_fixed": bool(a.camera_fixed), "seed": int(a.seed)}
     if q.get("note"):
         log(f"  {q['note']}")
-    log(f"Submitting video to {q['model_id']} ({q['duration_s']}s {q['resolution']}, ~{q['credits_est']} credits / ${q['usd_est']:.2f})")
+    log(f"Submitting video ({mode}) to {q['model_id']} ({q['duration_s']}s {q['resolution']}, "
+        f"~{q['credits_est']} credits / ${q['usd_est']:.2f})")
     task_id = create_task(q["model_id"], inp)
     task = poll_task(task_id, every=15, timeout=1500)
+    still_local = local_or_none(a.image)
     name = a.name or (still_local.stem if still_local else f"{dt.datetime.now():%Y%m%d-%H%M%S}-{slugify(a.prompt)}")
     finish("video", task, model, q["model_id"], a.prompt,
            {"duration_s": q["duration_s"], "resolution": q["resolution"], "camera_fixed": bool(a.camera_fixed),
-            "seed": int(a.seed), "draft": bool(a.draft), "generate_audio": not a.no_audio},
+            "seed": int(a.seed), "draft": bool(a.draft), "generate_audio": not a.no_audio, "mode": mode,
+            "ref_video_s": ref_video_s or None},
            name, "mp4", q["credits_est"],
-           {"input_image": str(still_local or a.image), "input_image_url": image_url, "preset": a.preset})
+           {"input_image": a.image, "input_image_url": image_url, "preset": a.preset,
+            "end_image": a.end_image, "ref_video": a.ref_video, "refs": (a.ref or None),
+            "characters": [c.get("id") for c in chars] or None,
+            "sent_prompt": prompt if prompt != a.prompt else None})
+
+
+def cmd_characters(a: argparse.Namespace) -> None:
+    chars = read_characters()
+    if a.action == "list":
+        out({"ok": True, "file": str(characters_path()), "characters": chars})
+    if a.action == "remove":
+        c = find_character(a.id)
+        write_characters([x for x in chars if x.get("id") != c.get("id")])
+        out({"ok": True, "removed": c.get("id")})
+    if not a.name or not a.image:
+        die("characters add needs --name and at least one --image")
+    tag = slugify(a.tag or a.name, 24)
+    if any(x.get("tag") == tag for x in chars):
+        die(f"a character with tag @{tag} already exists")
+    images = []
+    refs = gen_dir() / "refs"
+    refs.mkdir(parents=True, exist_ok=True)
+    for im in a.image:
+        p = local_or_none(im)
+        if p is None:
+            images.append(im)
+            continue
+        if not p.exists():
+            die(f"file not found: {p}")
+        dest = refs / f"{tag}-{p.name}"  # keep a copy next to the outputs so the dashboard can show it
+        if p.resolve() != dest.resolve():
+            shutil.copyfile(p, dest)
+        images.append(str(dest.resolve()))
+    now = dt.datetime.now().astimezone().isoformat(timespec="seconds")
+    c = {"id": tag, "tag": tag, "name": a.name.strip(), "description": (a.description or "").strip(),
+         "images": images, "created_at": now, "updated_at": now}
+    write_characters(chars + [c])
+    out({"ok": True, "character": c})
 
 
 def cmd_finalize(a: argparse.Namespace) -> None:
@@ -667,6 +893,7 @@ def main() -> None:
     p.add_argument("--model")
     p.add_argument("--duration", type=float)
     p.add_argument("--resolution", help="image: 1K/2K/4K; Seedance 2.5 video: 480p/720p/1080p")
+    p.add_argument("--ref-video-seconds", type=float, help="length of a reference video (cheaper rate, billed on input + output)")
     p.set_defaults(fn=cmd_quote)
 
     p = sub.add_parser("image")
@@ -676,6 +903,7 @@ def main() -> None:
     p.add_argument("--resolution", choices=["1K", "2K", "4K"])
     p.add_argument("--format", choices=["png", "jpg"])
     p.add_argument("--ref", action="append", help="reference image URL or local path (repeatable)")
+    p.add_argument("--character", action="append", help="character id or @tag; its images go first (repeatable)")
     p.add_argument("--name", help="output file stem")
     p.add_argument("--preset", help="preset name, recorded in the sidecar")
     p.add_argument("--override-cap", action="store_true")
@@ -686,7 +914,15 @@ def main() -> None:
     p.set_defaults(fn=cmd_upload)
 
     p = sub.add_parser("video")
-    p.add_argument("--image", required=True, help="approved still: local path or public URL")
+    p.add_argument("--image", help="start frame: local path or public URL (modes first and first-last)")
+    p.add_argument("--mode", choices=["first", "first-last", "reference"],
+                   help="Seedance 2.5: start frame only (default), start + end frame, or characters/references")
+    p.add_argument("--end-image", help="end frame for --mode first-last")
+    p.add_argument("--character", action="append", help="character id or @tag (repeatable, --mode reference)")
+    p.add_argument("--ref", action="append", help="extra reference image (repeatable, --mode reference)")
+    p.add_argument("--ref-video", help="reference clip, e.g. the previous shot to continue (--mode reference)")
+    p.add_argument("--ref-video-seconds", type=float, help="length of --ref-video when it is a URL")
+    p.add_argument("--aspect", help="--mode reference only: 9:16 (default), 16:9, 1:1, 4:3, 3:4, 21:9")
     p.add_argument("--prompt", required=True, help="short motion description")
     p.add_argument("--model", choices=["2.5", "pro", "lite"], help="default 2.5")
     p.add_argument("--duration", type=float)
@@ -710,6 +946,15 @@ def main() -> None:
     p.add_argument("--approve", action="store_true", help="user explicitly approved this paid run")
     p.add_argument("--override-cap", action="store_true")
     p.set_defaults(fn=cmd_finalize)
+
+    p = sub.add_parser("characters", help="saved characters reused across generations")
+    p.add_argument("action", choices=["list", "add", "remove"])
+    p.add_argument("--name")
+    p.add_argument("--tag", help="short @tag for prompts; default from the name")
+    p.add_argument("--description", help="one line that fixes identity: age, hair, outfit, distinguishing marks")
+    p.add_argument("--image", action="append", help="reference image path or URL (repeatable, best 2 to 4)")
+    p.add_argument("--id")
+    p.set_defaults(fn=cmd_characters)
 
     p = sub.add_parser("status")
     p.add_argument("--task-id", required=True)

@@ -26,6 +26,8 @@
     "2.5": {
       "id": "bytedance/seedance-2-5",
       "credits_per_second": { "480p": 28, "720p": 63, "1080p": 158 },
+      "credits_per_second_with_video": { "480p": 17, "720p": 38, "1080p": 95 },
+      "_with_video_note": "With a reference video, kie.ai bills input video seconds plus output seconds at this lower rate.",
       "durations": [4, 5, 6, 8, 10, 12, 15],
       "resolutions": ["480p", "720p", "1080p"],
       "default_resolution": "480p"

@@ -118,6 +118,32 @@ at the draft. Only finalize drafts the user has watched and approved.
   budget. If anything looks wrong, say it failed rather than handing over a
   bad file.
 
+## Characters, start + end frames, extending
+
+Saved characters live in `generations/characters.json` (local) or the Blob
+index (hosted). Each one is a name, a short `@tag`, one identity line and 1-8
+photos; the first 4 are sent, first photo first.
+
+```
+python <skill>/scripts/kie.py characters add --name Reiks --description "late 20s, short dark fade, black bomber" --image front.jpg --image three-quarter.jpg --image full-body.jpg
+python <skill>/scripts/kie.py characters list
+```
+
+- **Still with a character:** `image --character reiks --prompt "@reiks leans on a black car at night"`.
+  The script binds `@reiks` to his photos and appends an identity lock.
+- **Start + end:** make both stills with the character, then
+  `video --mode first-last --image start.png --end-image end.png --prompt "<the move between them>" --draft --approve`.
+- **Character in a new clip without a start still:**
+  `video --mode reference --character reiks --prompt "@reiks raps to camera, slow orbit" --draft --approve`.
+- **Extend a clip:** either `--mode first --image <clip>.last.png` (exact
+  continuity, no character lock) or `--mode reference --ref-video <clip>.mp4
+  --character reiks --prompt "Continue @Video1 seamlessly. Next: ..."` (keeps
+  the face; the reference clip's seconds are billed at the lower with-video
+  rate, so quote with `--ref-video-seconds`).
+
+Read the "Three modes" section of `models/seedance-2-5-image-to-video.md`
+before using these.
+
 ## Budget rules
 
 - `SESSION_CAP_USD` (default $10 per calendar day) and `MONTHLY_CAP_USD`

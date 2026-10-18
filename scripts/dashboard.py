@@ -17,6 +17,7 @@ API
   GET  /api/tasks?id=<job>   one job's status
   POST /api/item             {id, rating, note, hidden}  -> review metadata
   POST /api/upload           {name, data (base64), kind: ref|still} -> saves a file
+  POST /api/character        {id?, name, description, images: [ref...]} or {id, delete: true}
   GET  /media/<file>         serves a file from the generations folder
 """
 
@@ -47,7 +48,8 @@ import kie  # noqa: E402  (sibling module)
 
 MEDIA_EXT = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".mov", ".webm"}
 VIDEO_EXT = {".mp4", ".mov", ".webm"}
-EXTRA_KEYS = ("group", "negative", "fields", "seed", "parent_id", "refs", "rating", "note", "hidden", "variant")
+EXTRA_KEYS = ("group", "negative", "fields", "seed", "parent_id", "refs", "rating", "note", "hidden", "variant",
+              "characters", "end_image", "ref_video", "last_frame", "sent_prompt")
 
 JOBS: dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
@@ -140,7 +142,7 @@ def list_generations() -> list[dict]:
     d = kie.gen_dir()
     items = []
     for p in sorted(d.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-        if not p.is_file() or p.suffix.lower() not in MEDIA_EXT:
+        if not p.is_file() or p.suffix.lower() not in MEDIA_EXT or ".last." in p.name:
             continue
         meta = {}
         side = p.with_suffix(p.suffix + ".json")
@@ -172,8 +174,56 @@ def list_generations() -> list[dict]:
         }
         for k in EXTRA_KEYS:
             item[k] = meta.get(k)
+        if meta.get("last_frame"):
+            item["last_frame_url"] = "/media/" + quote(meta["last_frame"])
+            item["last_frame_path"] = str(d / meta["last_frame"])
         items.append(item)
     return items
+
+
+def media_url(ref: str) -> str:
+    """Browser URL for a stored image reference (absolute path in the generations folder, or a URL)."""
+    if re.match(r"^https?://", ref) or ref.startswith("/media/"):
+        return ref
+    base = kie.gen_dir().resolve()
+    try:
+        return "/media/" + quote(Path(ref).resolve().relative_to(base).as_posix())
+    except ValueError:
+        return ""
+
+
+def list_characters() -> list[dict]:
+    return [{**c, "image_urls": [media_url(str(i)) for i in c.get("images") or []]} for c in kie.read_characters()]
+
+
+def save_character(p: dict) -> dict:
+    chars = kie.read_characters()
+    cid = str(p.get("id") or "").strip()
+    if p.get("delete"):
+        kept = [c for c in chars if c.get("id") != cid]
+        if len(kept) == len(chars):
+            raise ValueError("character not found")
+        kie.write_characters(kept)
+        return {"ok": True, "deleted": cid}
+    name = (p.get("name") or "").strip()
+    images = [resolve_image(str(i)) for i in (p.get("images") or []) if str(i).strip()]
+    if not name:
+        raise ValueError("a character needs a name")
+    if not images:
+        raise ValueError("a character needs at least one reference image")
+    now = dt.datetime.now().astimezone().isoformat(timespec="seconds")
+    hit = next((c for c in chars if c.get("id") == cid), None) if cid else None
+    if hit is None:
+        tag = kie.slugify(name, 24)
+        taken = {c.get("tag") for c in chars}
+        base, i = tag, 2
+        while tag in taken:
+            tag, i = f"{base}-{i}", i + 1
+        hit = {"id": tag, "tag": tag, "created_at": now}
+        chars.append(hit)
+    hit.update(name=name, description=(p.get("description") or "").strip(), images=images[:8], updated_at=now)
+    kie.write_characters(chars)
+    return {"ok": True, "character": hit}
 
 
 def state() -> dict:
@@ -193,6 +243,7 @@ def state() -> dict:
         "generations_dir": str(kie.gen_dir()),
         "generations": list_generations(),
         "refs": list_refs(),
+        "characters": list_characters(),
         "pricing": {"image": pricing.get("image", {}), "video": pricing.get("video", {})},
         "jobs": jobs,
     }
@@ -306,10 +357,31 @@ def build_args(p: dict) -> list[str]:
         for r in p.get("refs") or []:
             if str(r).strip():
                 args += ["--ref", resolve_image(str(r))]
+        for c in p.get("characters") or []:
+            args += ["--character", str(c)]
     else:
-        if not (p.get("image") or "").strip():
-            raise ValueError("a source still is required for video")
-        args += ["--image", resolve_image(p["image"])]
+        mode = p.get("mode") or "first"
+        args += ["--mode", mode]
+        if mode == "reference":
+            for c in p.get("characters") or []:
+                args += ["--character", str(c)]
+            for r in p.get("refs") or []:
+                if str(r).strip():
+                    args += ["--ref", resolve_image(str(r))]
+            if (p.get("ref_video") or "").strip():
+                args += ["--ref-video", resolve_image(p["ref_video"])]
+                if p.get("ref_video_s"):
+                    args += ["--ref-video-seconds", str(p["ref_video_s"])]
+            if p.get("aspect"):
+                args += ["--aspect", str(p["aspect"])]
+        else:
+            if not (p.get("image") or "").strip():
+                raise ValueError("a start frame is required for video")
+            args += ["--image", resolve_image(p["image"])]
+            if mode == "first-last":
+                if not (p.get("end_image") or "").strip():
+                    raise ValueError("an end frame is required for start + end mode")
+                args += ["--end-image", resolve_image(p["end_image"])]
         for k, flag in (("model", "--model"), ("duration", "--duration"), ("resolution", "--resolution"),
                         ("name", "--name"), ("preset", "--preset")):
             if p.get(k):
@@ -420,6 +492,8 @@ def quote_cost(p: dict) -> dict:
         args += ["--duration", str(p["duration"])]
     if p.get("resolution"):
         args += ["--resolution", "480p" if (kind == "video" and p.get("draft")) else str(p["resolution"])]
+    if kind == "video" and p.get("mode") == "reference" and p.get("ref_video") and p.get("ref_video_s"):
+        args += ["--ref-video-seconds", str(p["ref_video_s"])]
     _, data, _ = run_kie(args, timeout=60)
     allow_multi = kind == "image" or (kind == "video" and p.get("draft"))
     count = max(1, min(4, int(p.get("count") or 1))) if allow_multi else 1
@@ -502,6 +576,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": ok, "error": None if ok else "item not found"}, 200 if ok else 404)
             if path == "/api/upload":
                 return self._json(save_upload(body))
+            if path == "/api/character":
+                return self._json(save_character(body))
         except ValueError as e:
             return self._json({"ok": False, "error": str(e)}, 400)
         self._json({"ok": False, "error": "not found"}, 404)
