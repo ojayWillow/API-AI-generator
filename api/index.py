@@ -289,6 +289,8 @@ def save_upload(p: dict) -> dict:
 # characters: a name, an identity line and 1-8 reference images, reused across generations
 # ---------------------------------------------------------------------------
 MAX_CHAR_IMAGES = 4  # sent per character; the first images hold identity best
+MAX_PHOTOS = 8  # stored per character
+MAX_REFS = {"nano-banana-2": 14, "seedance": 30}  # reference images kie.ai accepts per request
 
 
 def save_character(p: dict) -> dict:
@@ -309,6 +311,8 @@ def save_character(p: dict) -> dict:
         raise ApiError("a character needs at least one reference image")
     if any(not re.match(r"^https?://", i) for i in images):
         raise ApiError("character images must be public URLs on the hosted dashboard")
+    if len(images) > MAX_PHOTOS:
+        raise ApiError(f"a character holds up to {MAX_PHOTOS} photos; remove one first")
     out: dict = {}
     def upsert(d: dict) -> None:
         stamp = now().isoformat(timespec="seconds")
@@ -318,16 +322,18 @@ def save_character(p: dict) -> dict:
             base = tag
             while tag in taken:
                 tag, i = f"{base}-{i}", i + 1
-            hit = {"id": tag, "tag": tag, "created_at": stamp}
+            # ids are never reused, so old generations never attach to a new character with the same name
+            hit = {"id": f"{tag}-{uuid.uuid4().hex[:6]}", "tag": tag, "created_at": stamp}
             d["characters"].append(hit)
-        hit.update(name=name, description=(p.get("description") or "").strip(), images=images[:8], updated_at=stamp)
+        hit.update(name=name, description=(p.get("description") or "").strip(), images=images, updated_at=stamp)
         out.update(hit)
     index_mutate(upsert)
     return {"ok": True, "character": out}
 
 
 def characters_by_id(ids: list) -> list[dict]:
-    known = {c.get("id"): c for c in index_read()["characters"]}
+    # a fresh read when characters are used, so a paid run never sends photos removed seconds ago
+    known = {c.get("id"): c for c in index_read(force=bool(ids))["characters"]}
     chars = []
     for i in ids or []:
         c = known.get(str(i))
@@ -337,26 +343,38 @@ def characters_by_id(ids: list) -> list[dict]:
     return chars
 
 
-def character_images(chars: list[dict]) -> list[str]:
+def photos_per_character(chars: list[dict], n_refs: int, cap: int) -> int:
+    """How many photos each character can send so characters + extra refs fit under the model's cap."""
+    if not chars:
+        return MAX_CHAR_IMAGES
+    per = min(MAX_CHAR_IMAGES, (cap - n_refs) // len(chars))
+    if per < 1:
+        raise ApiError(f"too many references: {len(chars)} characters plus {n_refs} images, the model takes {cap}")
+    return per
+
+
+def character_images(chars: list[dict], per: int = MAX_CHAR_IMAGES) -> list[str]:
     out = []
     for c in chars:
-        out += [str(i) for i in (c.get("images") or [])[:MAX_CHAR_IMAGES]]
+        out += [str(i) for i in (c.get("images") or [])[:per]]
     return out
 
 
-def cast_prompt(prompt: str, chars: list[dict], first_index: int, video_tags: bool) -> str:
+def cast_prompt(prompt: str, chars: list[dict], first_index: int, video_tags: bool,
+                per: int = MAX_CHAR_IMAGES) -> str:
     """Same logic as scripts/kie.py: bind each character to its images and lock identity."""
     if not chars:
         return prompt
     lines, idx = [], first_index
     for c in chars:
-        n = min(len(c.get("images") or []), MAX_CHAR_IMAGES)
+        n = min(len(c.get("images") or []), per)
         nums = list(range(idx, idx + n))
         label = " ".join(f"@Image{i}" for i in nums) if video_tags else \
             ("reference image " if n == 1 else "reference images ") + ", ".join(str(i) for i in nums)
         name = c.get("name") or c.get("tag") or "character"
         if c.get("tag"):
-            prompt = re.sub(r"@" + re.escape(c["tag"]) + r"\b", name, prompt, flags=re.IGNORECASE)
+            # @anna must not match inside @anna-2; a lambda keeps backslashes in names literal
+            prompt = re.sub("@" + re.escape(c["tag"]) + r"(?![\w-])", lambda _m: name, prompt, flags=re.IGNORECASE)
         desc = (c.get("description") or "").strip().rstrip(".")
         lines.append(f"{name} is shown in {label}" + (f": {desc}." if desc else "."))
         idx += n
@@ -540,10 +558,15 @@ def quote(p: dict) -> dict:
             if model != "2.5":
                 raise ApiError("draft mode is a Seedance 2.5 feature")
             p = {**p, "resolution": "480p"}
-        try:
-            ref_s = float(p.get("ref_video_s") or 0) if p.get("mode") == "reference" and p.get("ref_video") else 0.0
-        except (TypeError, ValueError):
-            ref_s = 0.0
+        ref_s = 0.0
+        if p.get("mode") == "reference" and p.get("ref_video"):
+            # kie.ai bills the clip's seconds too; never fall back to the output-only price
+            try:
+                ref_s = float(p.get("ref_video_s") or 0)
+            except (TypeError, ValueError):
+                ref_s = 0.0
+            if not 0 < ref_s <= 30:
+                raise ApiError("reference clip length is unknown or over kie.ai's 30 s limit; pass ref_video_s")
         try:
             req = float(p.get("duration") or 10)
         except (TypeError, ValueError):
@@ -588,6 +611,9 @@ def generate(p: dict) -> list[dict]:
     negative = (p.get("negative") or "").strip()
     if not prompt:
         raise ApiError("prompt is required")
+    chars = characters_by_id(p.get("characters") or [])
+    if chars and p.get("kind") == "image" and (p.get("model") or "nano-banana-2") != "nano-banana-2":
+        p = {**p, "model": "nano-banana-2"}  # characters need reference images
     q = quote(p)
     allow_multi = q["kind"] == "image" or (q["kind"] == "video" and p.get("draft"))
     count = max(1, min(4, int(p.get("count") or 1))) if allow_multi else 1
@@ -603,22 +629,20 @@ def generate(p: dict) -> list[dict]:
     except (TypeError, ValueError):
         seed = -1
 
-    chars = characters_by_id(p.get("characters") or [])
     sent_prompt = None
     end_image = ref_video = None
     if q["kind"] == "image":
-        if chars and q["model"] != "nano-banana-2":
-            q = quote({**p, "model": "nano-banana-2"})  # characters need reference images
         refs = [str(r).strip() for r in (p.get("refs") or []) if str(r).strip()]
         for r in refs:
             if not re.match(r"^https?://", r):
                 raise ApiError("reference images must be public URLs on the hosted dashboard")
-        refs = character_images(chars) + refs
+        per = photos_per_character(chars, len(refs), MAX_REFS["nano-banana-2"])
+        sent_refs = character_images(chars, per) + refs  # job["refs"] keeps only the user's own refs
         if chars:
-            full_prompt = sent_prompt = cast_prompt(full_prompt, chars, 1, video_tags=False)
+            full_prompt = sent_prompt = cast_prompt(full_prompt, chars, 1, video_tags=False, per=per)
         aspect = p.get("aspect") or "9:16"
         if q["model"] == "nano-banana-2":
-            inp = {"prompt": full_prompt, "image_input": refs, "aspect_ratio": aspect,
+            inp = {"prompt": full_prompt, "image_input": sent_refs, "aspect_ratio": aspect,
                    "resolution": q["resolution"], "output_format": "png"}
         else:
             inp = {"prompt": full_prompt, "aspect_ratio": aspect, "resolution": q["resolution"]}
@@ -643,11 +667,12 @@ def generate(p: dict) -> list[dict]:
             ref_video = (p.get("ref_video") or "").strip() or None
             if any(not is_url(r) for r in refs + ([ref_video] if ref_video else [])):
                 raise ApiError("references must be public URLs on the hosted dashboard")
-            refs = character_images(chars) + refs
-            if not refs and not ref_video:
+            per = photos_per_character(chars, len(refs), MAX_REFS["seedance"])
+            sent_refs = character_images(chars, per) + refs
+            if not sent_refs and not ref_video:
                 raise ApiError("reference mode needs at least one character, reference image or reference clip")
             if chars:
-                full_prompt = sent_prompt = cast_prompt(full_prompt, chars, 1, video_tags=True)
+                full_prompt = sent_prompt = cast_prompt(full_prompt, chars, 1, video_tags=True, per=per)
         elif chars:
             raise ApiError("Seedance 2.5 cannot mix characters with a start frame. Lock the character into the "
                            "start and end stills instead, or switch to Cast mode.")
@@ -658,8 +683,8 @@ def generate(p: dict) -> list[dict]:
                    "generate_audio": audio, "output_format": "mp4", "return_last_frame": True}
             if mode == "reference":
                 inp["aspect_ratio"] = p.get("aspect") or "9:16"
-                if refs:
-                    inp["reference_image_urls"] = refs
+                if sent_refs:
+                    inp["reference_image_urls"] = sent_refs
                 if ref_video:
                     inp["reference_video_urls"] = [ref_video]
             else:
@@ -673,7 +698,7 @@ def generate(p: dict) -> list[dict]:
                    "camera_fixed": bool(p.get("camera_fixed")), "seed": seed}
         params = {"duration_s": q["duration_s"], "resolution": q["resolution"], "camera_fixed": bool(p.get("camera_fixed")),
                   "seed": seed, "draft": draft, "generate_audio": audio, "mode": mode,
-                  "ref_video_s": q.get("ref_video_s")}
+                  "ref_video_s": q.get("ref_video_s"), "aspect_ratio": inp.get("aspect_ratio")}
         input_image = image or None
 
     jobs = []
@@ -732,12 +757,14 @@ def finalize(p: dict) -> dict:
     job = {
         "id": task_id, "kind": "video", "model": "2.5-final", "model_id": q["model_id"], "prompt": src.get("prompt") or "",
         "params": {"duration_s": q["duration_s"], "resolution": "1080p", "draft_task_id": draft_id, "draft": False,
-                   "generate_audio": (src.get("params") or {}).get("generate_audio", True)},
+                   "generate_audio": (src.get("params") or {}).get("generate_audio", True),
+                   **{k: (src.get("params") or {}).get(k) for k in ("mode", "aspect_ratio", "ref_video_s")}},
         "name": f"{base}-1080p", "preset": src.get("preset"), "input_image": src.get("input_image"),
         "credits_est": q["credits_est"], "usd_est": q["usd_est"], "status": "running", "kie_state": "rendering 1080p",
         "started_at": time.time(), "created_at": now().isoformat(timespec="seconds"), "result": None,
         "group": src.get("group"), "negative": src.get("negative"), "fields": src.get("fields"), "seed": None,
-        "parent_id": draft_id, "refs": None, "variant": None,
+        "parent_id": draft_id, "refs": src.get("refs"), "variant": None,
+        **{k: src.get(k) for k in ("characters", "end_image", "ref_video", "sent_prompt")},
     }
     tasks_add([job])
     return job
@@ -785,8 +812,15 @@ def poll_task(task_id: str) -> dict:
     if any(e.get("task_id") == task_id for e in index_read()["ledger"]):
         task_remove(task_id)
         return {"ok": False, "gone": True, "error": "already saved"}
-    FINALIZING.add(task_id)  # the ledger dedupe below makes a rare double save harmless
+    FINALIZING.add(task_id)  # the ledger dedupe makes a rare double save harmless
+    try:
+        return save_result(task_id, job, d)
+    finally:
+        FINALIZING.discard(task_id)  # always released, whatever fails while saving
 
+
+def save_result(task_id: str, job: dict, d: dict) -> dict:
+    """Copy a finished kie.ai result into Blob and append the ledger row."""
     res = d.get("response")
     if not res:
         try:
@@ -800,11 +834,7 @@ def poll_task(task_id: str) -> dict:
     ext = (urllib.parse.urlparse(src).path.rsplit(".", 1)[-1] or "").lower()
     if ext not in {"png", "jpg", "jpeg", "webp", "mp4", "mov", "webm"}:
         ext = "png" if job["kind"] == "image" else "mp4"
-    try:
-        data = http("GET", src, raw=True, timeout=240)
-    except ApiError:
-        FINALIZING.discard(task_id)
-        raise
+    data = http("GET", src, raw=True, timeout=240)
     pathname = f"generations/{job['name']}-{task_id[-6:]}.{ext}"
     ctype = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp",
              "mp4": "video/mp4", "mov": "video/quicktime", "webm": "video/webm"}[ext]
@@ -817,7 +847,7 @@ def poll_task(task_id: str) -> dict:
             lext = "jpg" if lf[:2] == b"\xff\xd8" else "png"
             last_frame_url = blob_put(f"generations/{job['name']}-{task_id[-6:]}.last.{lext}", lf,
                                       "image/jpeg" if lext == "jpg" else "image/png").get("url")
-        except ApiError:
+        except Exception:  # noqa: BLE001  a missing last frame must never block saving the paid clip
             last_frame_url = None
     consumed = d.get("creditsConsumed")
     credits = float(consumed) if consumed is not None else float(job["credits_est"])
@@ -837,10 +867,7 @@ def poll_task(task_id: str) -> dict:
         if not any(e.get("task_id") == task_id for e in d["ledger"]):
             d["ledger"].append(entry)
         d["tasks"].pop(task_id, None)
-    try:
-        index_mutate(save)  # ledger row and task removal in one write
-    finally:
-        FINALIZING.discard(task_id)
+    index_mutate(save)  # ledger row and task removal in one write
     job.update(status="done", kie_state="success", finished_at=time.time(),
                result={"ok": True, "url": entry["url"], "file": entry["name"], "media": media,
                        "credits_consumed": consumed, "usd": entry["usd"]})

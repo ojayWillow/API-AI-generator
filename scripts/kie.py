@@ -197,6 +197,14 @@ def write_characters(chars: list[dict]) -> None:
     characters_path().write_text(json.dumps(chars, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+MAX_PHOTOS = 8  # stored per character; the first MAX_CHAR_IMAGES are sent
+
+
+def new_character_id(tag: str) -> str:
+    """Never reuse an id, so generations made with a deleted character don't attach to a new one."""
+    return f"{tag}-{os.urandom(3).hex()}"
+
+
 def find_character(key: str) -> dict:
     k = (key or "").strip().lstrip("@").lower()
     for c in read_characters():
@@ -206,9 +214,25 @@ def find_character(key: str) -> dict:
 
 
 MAX_CHAR_IMAGES = 4  # per character; the first images hold identity best
+MAX_REFS = {"nano-banana-2": 14, "seedance": 30}  # reference images kie.ai accepts per request
 
 
-def cast_prompt(prompt: str, chars: list[dict], first_index: int, video_tags: bool) -> str:
+def photos_per_character(chars: list[dict], n_refs: int, cap: int) -> int:
+    """How many photos each character can send so characters + extra refs fit under the model's cap."""
+    if not chars:
+        return MAX_CHAR_IMAGES
+    per = min(MAX_CHAR_IMAGES, (cap - n_refs) // len(chars))
+    if per < 1:
+        die(f"too many references: {len(chars)} characters plus {n_refs} images, the model takes {cap}")
+    return per
+
+
+def tag_pattern(tag: str) -> str:
+    return "@" + re.escape(tag) + r"(?![\w-])"  # @anna must not match inside @anna-2
+
+
+def cast_prompt(prompt: str, chars: list[dict], first_index: int, video_tags: bool,
+                per: int = MAX_CHAR_IMAGES) -> str:
     """Bind each character to its reference images and keep identity locked.
 
     Seedance 2.5 addresses reference images as @Image1..@ImageN by position, so
@@ -219,14 +243,14 @@ def cast_prompt(prompt: str, chars: list[dict], first_index: int, video_tags: bo
         return prompt
     lines, idx = [], first_index
     for c in chars:
-        n = min(len(c.get("images") or []), MAX_CHAR_IMAGES)
+        n = min(len(c.get("images") or []), per)
         nums = list(range(idx, idx + n))
         label = " ".join(f"@Image{i}" for i in nums) if video_tags else \
             ("reference image " if n == 1 else "reference images ") + ", ".join(str(i) for i in nums)
         name = c.get("name") or c.get("tag") or "character"
         tag = c.get("tag") or ""
         if tag:
-            prompt = re.sub(r"@" + re.escape(tag) + r"\b", name, prompt, flags=re.IGNORECASE)
+            prompt = re.sub(tag_pattern(tag), lambda _m: name, prompt, flags=re.IGNORECASE)
         desc = (c.get("description") or "").strip().rstrip(".")
         lines.append(f"{name} is shown in {label}" + (f": {desc}." if desc else "."))
         idx += n
@@ -237,10 +261,10 @@ def cast_prompt(prompt: str, chars: list[dict], first_index: int, video_tags: bo
     return " ".join(lines) + " " + body + " " + lock
 
 
-def character_images(chars: list[dict]) -> list[str]:
+def character_images(chars: list[dict], per: int = MAX_CHAR_IMAGES) -> list[str]:
     out = []
     for c in chars:
-        out += [str(i) for i in (c.get("images") or [])[:MAX_CHAR_IMAGES]]
+        out += [str(i) for i in (c.get("images") or [])[:per]]
     return out
 
 
@@ -671,8 +695,9 @@ def cmd_image(a: argparse.Namespace) -> None:
         log("  note: characters need reference images; switching to nano-banana-2")
         model = "nano-banana-2"
         q = quote_image(model, resolution)
-    prompt = cast_prompt(a.prompt, chars, 1, video_tags=False)
-    refs = [ensure_url(r) for r in character_images(chars) + (a.ref or [])]
+    per = photos_per_character(chars, len(a.ref or []), MAX_REFS["nano-banana-2"])
+    prompt = cast_prompt(a.prompt, chars, 1, video_tags=False, per=per)
+    refs = [ensure_url(r) for r in character_images(chars, per) + (a.ref or [])]
     if model == "nano-banana-2":
         inp = {"prompt": prompt, "image_input": refs, "aspect_ratio": aspect,
                "resolution": resolution, "output_format": a.format or "png"}
@@ -710,7 +735,7 @@ def check_still(ref: str, label: str) -> None:
 
 def cmd_video(a: argparse.Namespace) -> None:
     model = a.model or "2.5"
-    mode = a.mode or ("first-last" if a.end_image else "reference" if (a.character or a.ref_video) and not a.image else "first")
+    mode = a.mode or ("first-last" if a.end_image else "reference" if (a.character or a.ref or a.ref_video) and not a.image else "first")
     if a.draft and model != "2.5":
         die("--draft is a Seedance 2.5 feature")
     if mode != "first" and model != "2.5":
@@ -719,6 +744,8 @@ def cmd_video(a: argparse.Namespace) -> None:
         die("--image (the start frame) is required for this mode")
     if mode == "first-last" and not a.end_image:
         die("--end-image is required for --mode first-last")
+    if mode == "reference" and (a.image or a.end_image):
+        die("--mode reference takes no --image or --end-image; Seedance 2.5 cannot mix a start frame with references")
     if mode != "reference" and (a.character or a.ref or a.ref_video):
         die("characters and references only work with --mode reference; Seedance 2.5 cannot mix them "
             "with a start frame. Lock the character into the start and end stills instead.")
@@ -748,9 +775,10 @@ def cmd_video(a: argparse.Namespace) -> None:
         check_still(a.end_image, "end frame")
         end_url = ensure_url(a.end_image)
     if mode == "reference":
-        refs = [ensure_url(r) for r in character_images(chars) + (a.ref or [])]
+        per = photos_per_character(chars, len(a.ref or []), MAX_REFS["seedance"])
+        refs = [ensure_url(r) for r in character_images(chars, per) + (a.ref or [])]
         video_refs = [ensure_url(a.ref_video)] if a.ref_video else []
-        prompt = cast_prompt(prompt, chars, 1, video_tags=True)
+        prompt = cast_prompt(prompt, chars, 1, video_tags=True, per=per)
 
     if model == "2.5":
         inp = {"prompt": prompt, "duration": q["duration_s"], "resolution": q["resolution"],
@@ -778,11 +806,13 @@ def cmd_video(a: argparse.Namespace) -> None:
     task_id = create_task(q["model_id"], inp)
     task = poll_task(task_id, every=15, timeout=1500)
     still_local = local_or_none(a.image)
-    name = a.name or (still_local.stem if still_local else f"{dt.datetime.now():%Y%m%d-%H%M%S}-{slugify(a.prompt)}")
+    # a start frame saved as <clip>.last.png must not name the new clip <clip>.last.mp4
+    stem = re.sub(r"(\.last)+$", "", still_local.stem) if still_local else ""
+    name = a.name or stem or f"{dt.datetime.now():%Y%m%d-%H%M%S}-{slugify(a.prompt)}"
     finish("video", task, model, q["model_id"], a.prompt,
            {"duration_s": q["duration_s"], "resolution": q["resolution"], "camera_fixed": bool(a.camera_fixed),
             "seed": int(a.seed), "draft": bool(a.draft), "generate_audio": not a.no_audio, "mode": mode,
-            "ref_video_s": ref_video_s or None},
+            "ref_video_s": ref_video_s or None, "aspect_ratio": inp.get("aspect_ratio")},
            name, "mp4", q["credits_est"],
            {"input_image": a.image, "input_image_url": image_url, "preset": a.preset,
             "end_image": a.end_image, "ref_video": a.ref_video, "refs": (a.ref or None),
@@ -803,22 +833,25 @@ def cmd_characters(a: argparse.Namespace) -> None:
     tag = slugify(a.tag or a.name, 24)
     if any(x.get("tag") == tag for x in chars):
         die(f"a character with tag @{tag} already exists")
+    cid = new_character_id(tag)
     images = []
     refs = gen_dir() / "refs"
     refs.mkdir(parents=True, exist_ok=True)
-    for im in a.image:
+    if len(a.image) > MAX_PHOTOS:
+        die(f"a character holds up to {MAX_PHOTOS} photos")
+    for i, im in enumerate(a.image, 1):
         p = local_or_none(im)
         if p is None:
             images.append(im)
             continue
         if not p.exists():
             die(f"file not found: {p}")
-        dest = refs / f"{tag}-{p.name}"  # keep a copy next to the outputs so the dashboard can show it
+        dest = refs / f"{cid}-{i}-{p.name}"  # keep a copy next to the outputs so the dashboard can show it
         if p.resolve() != dest.resolve():
             shutil.copyfile(p, dest)
         images.append(str(dest.resolve()))
     now = dt.datetime.now().astimezone().isoformat(timespec="seconds")
-    c = {"id": tag, "tag": tag, "name": a.name.strip(), "description": (a.description or "").strip(),
+    c = {"id": cid, "tag": tag, "name": a.name.strip(), "description": (a.description or "").strip(),
          "images": images, "created_at": now, "updated_at": now}
     write_characters(chars + [c])
     out({"ok": True, "character": c})
@@ -842,10 +875,12 @@ def cmd_finalize(a: argparse.Namespace) -> None:
     base = Path(src["file"]).stem if src and src.get("file") else f"draft-{a.draft_task_id[-6:]}"
     name = a.name or f"{base}-1080p"
     finish("video", task, "2.5-final", q["model_id"], (src or {}).get("prompt") or "",
-           {"duration_s": int(dur), "resolution": "1080p", "draft_task_id": a.draft_task_id, "draft": False},
+           {"duration_s": int(dur), "resolution": "1080p", "draft_task_id": a.draft_task_id, "draft": False,
+            **{k: ((src or {}).get("params") or {}).get(k) for k in ("mode", "aspect_ratio", "ref_video_s", "generate_audio")}},
            name, "mp4", q["credits_est"],
            {"input_image": (src or {}).get("input_image"), "preset": (src or {}).get("preset"),
-            "parent_id": a.draft_task_id, "group": (src or {}).get("group")})
+            "parent_id": a.draft_task_id, "group": (src or {}).get("group"),
+            **{k: (src or {}).get(k) for k in ("characters", "end_image", "ref_video", "refs")}})
 
 
 def cmd_status(a: argparse.Namespace) -> None:

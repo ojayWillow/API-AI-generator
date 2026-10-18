@@ -299,7 +299,7 @@
   function updateGo() { $("goBtn").disabled = kind === "video" && !$("approve").checked; }
   $("kindImage").onclick = () => setKind("image"); $("kindVideo").onclick = () => setKind("video");
   $("approve").onchange = updateGo;
-  $("clearBtn").onclick = () => { $("form").reset(); $("audio").checked = true; refSel.length = 0; castSel.length = 0; endSource = null; refVideo = null; source = null; parentId = null; settings.count = 1; manualPrompt = false; applyPreset(); renderSource(); renderRefs(); renderPills(); $("formMsg").textContent = ""; updateGo(); estimate(); };
+  $("clearBtn").onclick = () => { $("form").reset(); $("audio").checked = true; refSel.length = 0; castSel.length = 0; endSource = null; refVideo = null; source = null; parentId = null; settings.count = 1; manualPrompt = false; vmode = "first"; applyPreset(); renderSource(); applyVMode(); renderPills(); $("formMsg").textContent = ""; updateGo(); estimate(); };
 
   // ---------- references and uploads ----------
   function renderRefs() {
@@ -430,7 +430,7 @@
     renderEditor(); showView("cast"); $("ceName").focus();
   }
   function renderEditor() {
-    const tag = editor.id ? (charById(editor.id) || {}).tag : ($("ceName").value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || "…");
+    const tag = editor.id ? (charById(editor.id) || {}).tag : ($("ceName").value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24).replace(/-+$/, "") || "…");
     $("ceTag").textContent = "@" + tag;
     $("ceImgs").innerHTML = editor.images.map((im, k) => `<div class="ref" title="${k ? "" : "main photo"}"><img src="${esc(im.url)}" alt=""><button type="button" class="rm" data-k="${k}">${ICON.x}</button></div>`).join("")
       + `<div class="ref add" id="ceAdd" title="Upload photos">${ICON.plus}</div>`;
@@ -477,7 +477,7 @@
       const c = charById(b.closest(".ccard").dataset.id); if (!c) return;
       if (b.dataset.c === "edit") return openEditor(c);
       if (!castSel.includes(c.id)) castSel.push(c.id);
-      if (b.dataset.c === "still") setKind("image"); else { setKind("video"); vmode = "reference"; applyVMode(); }
+      if (b.dataset.c === "still") { setKind("image"); $("imgModel").value = "nano-banana-2"; } else { setKind("video"); vmode = "reference"; applyVMode(); }
       manualPrompt = true; if (!$("prompt").value.includes("@" + c.tag)) $("prompt").value = `@${c.tag} ` + $("prompt").value;
       renderCastPick(); toCreate(); $("prompt").focus();
     });
@@ -489,6 +489,7 @@
       if (!it.v) { closeViewer(); openEditor(null, [im]); return; }
       const c = charById(it.v);
       if ((c.images || []).includes(im.ref)) { toast("Already in this character."); return; }
+      if ((c.images || []).length >= 8) { toast(`@${c.tag} already has 8 photos. Remove one in Cast first.`, 5000); return; }
       const r = await api("/api/character", {id: c.id, name: c.name, description: c.description, images: (c.images || []).concat([im.ref])});
       if (r.ok) { toast(`Added to @${c.tag}`); load(); } else toast(r.error || "could not save", 5000);
     });
@@ -516,6 +517,7 @@
     if (kind === "video" && vmode !== "reference" && !(p.image || "").trim()) { $("formMsg").textContent = "Add a start frame first."; return; }
     if (kind === "video" && vmode === "first-last" && !(p.end_image || "").trim()) { $("formMsg").textContent = "Add an end frame first."; return; }
     if (kind === "video" && vmode === "reference" && !p.characters.length && !p.refs.length && !p.ref_video) { $("formMsg").textContent = "Pick a character, a reference image or a clip."; return; }
+    if (kind === "video" && vmode === "reference" && p.ref_video && !(p.ref_video_s > 0)) { $("formMsg").textContent = "The reference clip's length is unknown, so it can't be priced. Remove it or pick another clip."; return; }
     $("formMsg").textContent = "Submitting…"; $("goBtn").disabled = true;
     try { const js = await submit(p); $("formMsg").textContent = js.length > 1 ? `${js.length} started.` : "Started."; $("approve").checked = false; parentId = null; showView("create"); }
     catch (e) { $("formMsg").textContent = e.message; }
@@ -536,7 +538,16 @@
     if (!ref) return null;
     if (/^https?:/.test(ref)) return ref;
     const hit = (state.generations || []).concat(state.refs || []).find(x => x.path === ref || x.name === ref);
-    return hit ? hit.url : null;
+    if (hit) return hit.url;
+    const clip = (state.generations || []).find(x => x.last_frame_path && x.last_frame_path === ref);
+    return clip ? clip.last_frame_url : null;
+  }
+  function restoreCast(g) { castSel.length = 0; (g.characters || []).forEach(id => { if (charById(id)) castSel.push(id); }); }
+  function restoreRefs(g) {
+    // older hosted records stored the character photos in refs too; keep only the user's own
+    const charImgs = new Set((g.characters || []).flatMap(id => (charById(id) || {}).images || []));
+    refSel.length = 0;
+    (g.refs || []).filter(r => !charImgs.has(r)).slice(0, 3).forEach(r => refSel.push({ref: r, url: thumbUrl(r) || r, name: String(r).split(/[\\/]/).pop()}));
   }
   const isDraft = (g) => isVideoItem(g) && g.params && g.params.draft;
   const finalOf = (g) => state.generations.find(x => x.parent_id === g.id && x.model === "2.5-final");
@@ -722,7 +733,7 @@
         const secs = (g.media && g.media.duration_s) || (g.params && g.params.duration_s) || 0;
         if (secs > 15) toast("Long clip: kie.ai caps reference clips at 30 s in total, and every second is billed.", 5000);
         refVideo = {ref: refOf(g), url: g.url, name: g.name, seconds: secs};
-        castSel.length = 0; (g.characters || []).forEach(id => { if (charById(id)) castSel.push(id); });
+        restoreCast(g); refSel.length = 0;
         manualPrompt = true; $("prompt").value = "Continue @Video1 seamlessly from its final frame, same camera and lighting. Next: ";
         settings.vres = "480p"; settings.duration = (g.params && g.params.duration_s) || 10;
         if (g.media && g.media.width) settings.vaspect = ratioOf(g) || settings.vaspect;
@@ -735,8 +746,9 @@
         $("negative").value = g.negative || "";
         if (g.params) { if (g.params.aspect_ratio) settings.aspect = g.params.aspect_ratio; if (g.params.resolution) settings.resolution = g.params.resolution; }
         if (g.model && $("imgModel").querySelector(`option[value="${g.model}"]`)) $("imgModel").value = g.model;
-        refSel.length = 0; (g.refs || []).forEach(r => refSel.push({ref: r, url: thumbUrl(r) || r, name: String(r).split(/[\\/]/).pop()}));
-        parentId = g.id; renderPills(); renderRefs(); estimate(); toCreate(); toast("Loaded. Edit and generate."); break;
+        restoreRefs(g); restoreCast(g);
+        if (castSel.length) $("imgModel").value = "nano-banana-2";
+        parentId = g.id; renderPills(); renderRefs(); renderCastPick(); estimate(); toCreate(); toast("Loaded. Edit and generate."); break;
       case "ref": closeViewer(); toggleRef({ref: refOf(g), url: g.url, name: g.name, path: g.path || null}); setKind("image"); toCreate(); toast("Added as a reference."); break;
       case "reframe169": case "reframe11": {
         const aspect = a === "reframe169" ? "16:9" : "1:1"; toast(`Generating a ${aspect} version…`);
@@ -751,7 +763,7 @@
         vmode = (g.params && g.params.mode) || "first";
         endSource = g.end_image ? (state.generations.find(x => refOf(x) === g.end_image || x.url === g.end_image) || {name: "previous end frame", url: thumbUrl(g.end_image) || g.end_image, path: g.end_image, prompt: ""}) : null;
         refVideo = g.ref_video ? {ref: g.ref_video, url: thumbUrl(g.ref_video) || g.ref_video, name: "previous reference clip", seconds: (g.params && g.params.ref_video_s) || 0} : null;
-        castSel.length = 0; (g.characters || []).forEach(id => { if (charById(id)) castSel.push(id); });
+        restoreCast(g); if (vmode === "reference") restoreRefs(g); else refSel.length = 0;
         if (g.params && g.params.mode === "reference" && g.params.aspect_ratio) settings.vaspect = g.params.aspect_ratio;
         applyVMode();
         source = state.generations.find(x => refOf(x) === g.input_image || x.url === g.input_image || x.path === g.input_image) || (g.input_image ? {name: "previous start frame", url: thumbUrl(g.input_image) || g.input_image, prompt: ""} : null);
@@ -768,8 +780,9 @@
           let up;
           if (g.last_frame_url) up = {name: stem + "-last", url: g.last_frame_url, path: g.last_frame_path || null};
           else { toast("Capturing the last frame…"); up = await uploadDataUrl(await lastFrame(g.url), stem + "-last", "still"); }
-          closeViewer(); setKind("video"); if (vmode === "reference") { vmode = "first"; applyVMode(); } source = {name: up.name, url: up.url, path: up.path, prompt: g.prompt}; renderSource();
-          setFields(g.fields); if (!g.fields) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true);
+          closeViewer(); setKind("video"); vmode = "first"; endSource = null; $("endStill").value = ""; applyVMode();
+          source = {name: up.name, url: up.url, path: up.path, prompt: g.prompt}; renderSource();
+          setFields(g.fields); if (!g.fields || !Object.values(g.fields).some(Boolean)) { manualPrompt = true; $("prompt").value = g.prompt || ""; } else compose(true);
           settings.vres = "480p"; settings.duration = (g.params && g.params.duration_s) || 10; parentId = g.id; renderPills(); estimate(); toCreate();
           toast("The last frame is the new start frame. Approve and make a draft to continue the shot.");
         } catch (e) { toast("Could not capture the frame: " + e.message, 5000); }

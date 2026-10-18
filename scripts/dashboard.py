@@ -51,6 +51,8 @@ VIDEO_EXT = {".mp4", ".mov", ".webm"}
 EXTRA_KEYS = ("group", "negative", "fields", "seed", "parent_id", "refs", "rating", "note", "hidden", "variant",
               "characters", "end_image", "ref_video", "last_frame", "sent_prompt")
 
+LAST_FRAME = re.compile(r"\.last\.(png|jpe?g|webp)$", re.IGNORECASE)  # Seedance last frames, shown via their clip
+
 JOBS: dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
 CREDITS = {"value": None, "usd": None, "checked_at": 0.0, "error": None, "checking": False}
@@ -142,7 +144,7 @@ def list_generations() -> list[dict]:
     d = kie.gen_dir()
     items = []
     for p in sorted(d.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-        if not p.is_file() or p.suffix.lower() not in MEDIA_EXT or ".last." in p.name:
+        if not p.is_file() or p.suffix.lower() not in MEDIA_EXT or LAST_FRAME.search(p.name):
             continue
         meta = {}
         side = p.with_suffix(p.suffix + ".json")
@@ -211,6 +213,8 @@ def save_character(p: dict) -> dict:
         raise ValueError("a character needs a name")
     if not images:
         raise ValueError("a character needs at least one reference image")
+    if len(images) > kie.MAX_PHOTOS:
+        raise ValueError(f"a character holds up to {kie.MAX_PHOTOS} photos; remove one first")
     now = dt.datetime.now().astimezone().isoformat(timespec="seconds")
     hit = next((c for c in chars if c.get("id") == cid), None) if cid else None
     if hit is None:
@@ -219,9 +223,9 @@ def save_character(p: dict) -> dict:
         base, i = tag, 2
         while tag in taken:
             tag, i = f"{base}-{i}", i + 1
-        hit = {"id": tag, "tag": tag, "created_at": now}
+        hit = {"id": kie.new_character_id(tag), "tag": tag, "created_at": now}
         chars.append(hit)
-    hit.update(name=name, description=(p.get("description") or "").strip(), images=images[:8], updated_at=now)
+    hit.update(name=name, description=(p.get("description") or "").strip(), images=images, updated_at=now)
     kie.write_characters(chars)
     return {"ok": True, "character": hit}
 
@@ -257,14 +261,12 @@ def find_sidecar(item_id: str) -> Path | None:
     direct = d / item_id
     if direct.exists() and direct.with_suffix(direct.suffix + ".json").exists():
         return direct.with_suffix(direct.suffix + ".json")
-    for side in d.glob("*.json"):
-        if side.name == "ledger.json":
-            continue
+    for side in d.glob("*.*.json"):  # sidecars are <file>.<ext>.json; skips ledger.json and characters.json
         try:
             meta = json.loads(side.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             continue
-        if meta.get("task_id") == item_id:
+        if isinstance(meta, dict) and meta.get("task_id") == item_id:
             return side
     return None
 
@@ -277,6 +279,8 @@ def apply_extras(item_id: str, extras: dict) -> bool:
         try:
             meta = json.loads(side.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
+            meta = {}
+        if not isinstance(meta, dict):
             meta = {}
         meta.update(extras)
         side.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
