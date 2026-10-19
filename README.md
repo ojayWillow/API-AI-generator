@@ -80,6 +80,22 @@ clip. The create panel is built for iteration, not single shots:
 - **One-click follow-ups.** Animate, Tweak (reload into the builder), Use as
   ref, 16:9 and 1:1 reframes, a 2K or 4K version, and for clips Redo and Extend
   (captures the last frame in the browser and uses it as the next source still).
+- **Cast.** Save a character once (name, `@tag`, identity line, 2-4 photos)
+  and reuse it in any still or clip. Tag `@reiks` in the prompt; his photos
+  go to the model first with an identity lock. "Add to character" on any
+  image builds the set from your own outputs.
+- **Start + end frames.** "Use as end frame" on one image and Animate on
+  another: Seedance 2.5 moves from one to the other. "Make an end frame from
+  this" drafts the matching end still with the same people and lighting.
+- **Three video modes.** Start frame, Start + end, or Cast (characters,
+  reference images, a reference clip). Seedance 2.5 takes one per request.
+- **Kling 3.0 for locked faces.** Pick Kling 3.0 as the video model and the
+  cast works in every mode, including Start + end: the shot lands on your end
+  still and up to 3 characters keep their faces. About $1.35 per 10 s at 1080p
+  with sound. No drafts; 720p is the cheap try. Each character needs 2+ photos.
+- **Extend two ways.** "Extend from last frame" uses the last frame Seedance
+  now returns (no browser capture). "Extend with cast" feeds the clip back as
+  `@Video1` with its characters, so faces hold across the cut.
 - **Draft then finalize for Seedance 2.5.** Clips are made as 480p drafts
   (28 credits per second, so about $1.40 per 10 s), one to four at a time.
   Press Finalize on the keeper and kie.ai re-renders that exact draft at 1080p
@@ -109,7 +125,9 @@ live in the cloud and the dashboard works from any device):
 
 Both modes use the same API: `GET /api/state`, `POST /api/quote`,
 `POST /api/generate` (with `count`, `refs`, `negative`, `fields`, `seed`),
-`GET /api/tasks?id=`, `POST /api/item` (rating, note, hidden), `POST /api/upload`.
+`GET /api/tasks?id=`, `POST /api/item` (rating, note, hidden), `POST /api/upload`,
+`POST /api/character`. Video `generate` takes `mode` (`first`, `first-last`,
+`reference`) with `image`, `end_image`, `characters`, `refs`, `ref_video`.
 
 ## Using the script directly
 
@@ -133,6 +151,7 @@ code 3 means it would exceed a spend cap.
 | Video (default) | Seedance 1.0 Pro | `bytedance/v1-pro-image-to-video` |
 | Video (budget) | Seedance 1.0 Lite | `bytedance/v1-lite-image-to-video` |
 | Video (on request) | Seedance 2.5 | `bytedance/seedance-2-5` |
+| Video with characters + start/end frames | Kling 3.0 | `kling-3.0/video` |
 
 Prices in `scripts/pricing.json` are estimates. The ledger stores the real
 `creditsConsumed` that kie.ai reports after each job. Check
