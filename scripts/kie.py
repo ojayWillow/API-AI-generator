@@ -12,11 +12,13 @@ Commands
   image    --prompt P [--model nano-banana-2|gpt-image-2] [--aspect 9:16]
            [--resolution 1K|2K|4K] [--ref URL_OR_PATH ...] [--character ID ...] [--name slug]
   upload   --file PATH                      host a local file on kie.ai (24 h)
-  video    --prompt P [--model 2.5|pro|lite] [--draft] [--resolution 480p|720p|1080p]
-           [--duration N] [--name slug] --approve, plus one of three Seedance 2.5 modes:
+  video    --prompt P [--model 2.5|kling-3.0|pro|lite] [--draft] [--resolution 480p|720p|1080p|4K]
+           [--duration N] [--name slug] --approve, plus one of three modes:
              --mode first       --image START            (default; the only mode for pro/lite)
              --mode first-last  --image START --end-image END
              --mode reference   [--character ID ...] [--ref IMG ...] [--ref-video MP4]
+           Seedance 2.5 takes characters in reference mode only. Kling 3.0 takes up to 3
+           --character in every mode, so start + end frames and faces lock together.
   characters list | add --name N --image P [--image P ...] [--description D] | remove --id ID
   finalize --draft-task-id ID --approve      render a 2.5 draft at 1080p
   status   --task-id ID
@@ -71,8 +73,15 @@ DEFAULT_PRICING = {
         "pro": {"id": "bytedance/v1-pro-image-to-video", "credits_per_second": 14, "durations": [5, 10]},
         "lite": {"id": "bytedance/v1-lite-image-to-video", "credits_per_second": 10, "durations": [5, 10]},
         "2.5": {"id": "bytedance/seedance-2-5", "credits_per_second": 20, "durations": [4, 5, 6, 8, 10, 12]},
+        "kling-3.0": {"id": "kling-3.0/video", "credits_per_second": {"720p": 14, "1080p": 18, "4K": 67},
+                      "credits_per_second_with_sound": {"720p": 20, "1080p": 27, "4K": 67},
+                      "durations": list(range(3, 16)), "resolutions": ["720p", "1080p", "4K"],
+                      "default_resolution": "720p", "modes": {"720p": "std", "1080p": "pro", "4K": "4K"}},
     },
 }
+KLING = "kling-3.0"
+KLING_ASPECTS = ("9:16", "16:9", "1:1")
+KLING_MAX_CHARACTERS = 3
 
 
 def load_pricing() -> dict:
@@ -267,6 +276,41 @@ def character_images(chars: list[dict], per: int = MAX_CHAR_IMAGES) -> list[str]
     for c in chars:
         out += [str(i) for i in (c.get("images") or [])[:per]]
     return out
+
+
+def kling_elements(prompt: str, chars: list[dict]) -> tuple[str, list[dict]]:
+    """Turn saved characters into Kling 3.0 elements and point the prompt's @tags at them.
+
+    Kling takes up to 3 elements of 2-4 photos each and addresses them as @name
+    in the prompt. Unlike Seedance, they work together with start and end frames.
+    Image paths are returned as given; the caller uploads them. Same logic as api/index.py.
+    """
+    if len(chars) > KLING_MAX_CHARACTERS:
+        die(f"Kling 3.0 takes up to {KLING_MAX_CHARACTERS} characters per clip")
+    elements, missing, used = [], [], set()
+    for c in chars:
+        label = c.get("name") or c.get("tag") or "character"
+        imgs = [str(i) for i in (c.get("images") or [])][:MAX_CHAR_IMAGES]
+        if len(imgs) < 2:
+            die(f"Kling 3.0 needs at least 2 photos of {label}; add another to the character first")
+        name = re.sub(r"\W+", "_", str(c.get("tag") or label)).strip("_").lower() or "character"
+        while name in used:
+            name += "_2"
+        used.add(name)
+        tag = c.get("tag") or ""
+        if tag and re.search(tag_pattern(tag), prompt, flags=re.IGNORECASE):
+            prompt = re.sub(tag_pattern(tag), lambda _m: "@" + name, prompt, flags=re.IGNORECASE)
+        else:
+            missing.append("@" + name)
+        desc = (c.get("description") or "").strip().rstrip(".")
+        elements.append({"name": name, "description": f"{label}: {desc}" if desc else label,
+                         "element_input_urls": imgs})
+    if missing:
+        body = prompt.strip()
+        if body and body[-1] not in ".!?":
+            body += "."
+        prompt = f"{body} Featuring {', '.join(missing)}."
+    return prompt, elements
 
 
 def ledger_path() -> Path:
@@ -562,16 +606,21 @@ def video_resolution(model: str, requested: str | None) -> str:
     allowed = pr.get("resolutions") or ["1080p"]
     if requested in allowed:
         return requested
+    if requested:  # never render a different resolution than the one asked for
+        die(f"{model} renders {', '.join(allowed)}, not {requested}")
     return pr.get("default_resolution") or allowed[-1]
 
 
-def quote_video(model: str, duration: float, resolution: str | None = None, ref_video_s: float = 0) -> dict:
+def quote_video(model: str, duration: float, resolution: str | None = None, ref_video_s: float = 0,
+                audio: bool = True) -> dict:
     pr = load_pricing()["video"]
     if model not in pr:
         die(f"unknown video model '{model}'. Options: {', '.join(pr)}")
     dur, note = normalise_duration(model, duration)
     res = video_resolution(model, resolution)
     rate = pr[model]["credits_per_second"]
+    if audio and pr[model].get("credits_per_second_with_sound"):
+        rate = pr[model]["credits_per_second_with_sound"]  # Kling charges more with sound
     billed = dur
     if ref_video_s and pr[model].get("credits_per_second_with_video"):
         # kie.ai bills reference-video seconds plus output seconds at a lower rate
@@ -620,7 +669,7 @@ def cmd_quote(a: argparse.Namespace) -> None:
     elif a.kind == "final":
         q = quote_final(a.duration or 10)
     else:
-        q = quote_video(a.model or "2.5", a.duration or 10, a.resolution, a.ref_video_seconds or 0)
+        q = quote_video(a.model or "2.5", a.duration or 10, a.resolution, a.ref_video_seconds or 0, not a.no_audio)
     out({"ok": True, **q, "spend": spend_summary()})
 
 
@@ -668,8 +717,8 @@ VIDEO_EXTS = {"mp4", "mov", "webm"}
 def split_result(res: dict, urls: list[str], kind: str) -> tuple[str, str | None]:
     """Pick the main output and, for Seedance 2.5 with return_last_frame, the last-frame image.
 
-    kie.ai does not document where the last frame lands, so look for a key that
-    names it and fall back to an image URL next to the video in resultUrls.
+    kie.ai's task-detail doc gives the last frame as resultJson.lastFrameUrl (a list).
+    Accept a string too, and fall back to an image URL next to the video in resultUrls.
     """
     if kind != "video":
         return urls[0], None
@@ -677,8 +726,11 @@ def split_result(res: dict, urls: list[str], kind: str) -> tuple[str, str | None
     src = vids[0] if vids else urls[0]
     last = None
     for k, v in res.items():
-        if isinstance(v, str) and v.startswith("http") and "last" in k.lower() and "frame" in k.lower():
-            last = v
+        if "last" in k.lower() and "frame" in k.lower():
+            # kie.ai documents Seedance 2.x as {resultUrls: [], lastFrameUrl: []}: a list, not a string
+            v = next((x for x in v if isinstance(x, str)), None) if isinstance(v, list) else v
+            if isinstance(v, str) and v.startswith("http"):
+                last = v
     if not last:
         imgs = [u for u in urls if u != src and ext_from_url(u, "") in {"png", "jpg", "jpeg", "webp"}]
         last = imgs[0] if imgs else None
@@ -737,22 +789,27 @@ def check_still(ref: str, label: str) -> None:
 def cmd_video(a: argparse.Namespace) -> None:
     model = a.model or "2.5"
     mode = a.mode or ("first-last" if a.end_image else "reference" if (a.character or a.ref or a.ref_video) and not a.image else "first")
+    kling = model == KLING
     if a.draft and model != "2.5":
-        die("--draft is a Seedance 2.5 feature")
-    if mode != "first" and model != "2.5":
-        die(f"--mode {mode} is a Seedance 2.5 feature")
+        die("--draft is a Seedance 2.5 feature; Kling's cheap preview is --resolution 720p")
+    if mode != "first" and model not in ("2.5", KLING):
+        die(f"--mode {mode} needs Seedance 2.5 or Kling 3.0")
     if mode in ("first", "first-last") and not a.image:
         die("--image (the start frame) is required for this mode")
     if mode == "first-last" and not a.end_image:
         die("--end-image is required for --mode first-last")
     if mode == "reference" and (a.image or a.end_image):
-        die("--mode reference takes no --image or --end-image; Seedance 2.5 cannot mix a start frame with references")
-    if mode != "reference" and (a.character or a.ref or a.ref_video):
-        die("characters and references only work with --mode reference; Seedance 2.5 cannot mix them "
-            "with a start frame. Lock the character into the start and end stills instead.")
+        die("--mode reference takes no --image or --end-image; use --mode first or first-last for frames")
+    if kling and (a.ref or a.ref_video):
+        die("Kling 3.0 takes characters (--character), not loose --ref images or --ref-video clips")
+    if not kling and mode != "reference" and (a.character or a.ref or a.ref_video):
+        die("Seedance 2.5 takes characters and references only in --mode reference, never with a start frame. "
+            "Use --model kling-3.0 to lock faces with start and end frames, or put the character into the stills.")
     chars = [find_character(c) for c in (a.character or [])]
     if mode == "reference" and not (chars or a.ref or a.ref_video):
-        die("--mode reference needs at least one --character, --ref or --ref-video")
+        die("--mode reference needs at least one --character" + ("" if kling else ", --ref or --ref-video"))
+    if kling and (a.aspect or "9:16") not in KLING_ASPECTS and not a.image:
+        die(f"Kling 3.0 takes --aspect {', '.join(KLING_ASPECTS)}")
 
     ref_video_s = 0.0
     if a.ref_video:
@@ -760,7 +817,7 @@ def cmd_video(a: argparse.Namespace) -> None:
         ref_video_s = a.ref_video_seconds or ((mp4_info(lv) or {}).get("duration_s") if lv else 0) or 0
         if not ref_video_s:
             die("could not read the reference video length; pass --ref-video-seconds")
-    q = quote_video(model, a.duration or 10, "480p" if a.draft else a.resolution, ref_video_s)
+    q = quote_video(model, a.duration or 10, "480p" if a.draft else a.resolution, ref_video_s, not a.no_audio)
     s = enforce_caps(q["usd_est"], a.override_cap)
     if not a.approve:
         out({"ok": False, "approval_required": True,
@@ -775,7 +832,12 @@ def cmd_video(a: argparse.Namespace) -> None:
     if mode == "first-last":
         check_still(a.end_image, "end frame")
         end_url = ensure_url(a.end_image)
-    if mode == "reference":
+    elements = []
+    if kling and chars:
+        prompt, elements = kling_elements(prompt, chars)
+        for e in elements:
+            e["element_input_urls"] = [ensure_url(u) for u in e["element_input_urls"]]
+    elif mode == "reference":
         per = photos_per_character(chars, len(a.ref or []), MAX_REFS["seedance"])
         refs = [ensure_url(r) for r in character_images(chars, per) + (a.ref or [])]
         video_refs = [ensure_url(a.ref_video)] if a.ref_video else []
@@ -797,6 +859,18 @@ def cmd_video(a: argparse.Namespace) -> None:
                 inp["last_frame_url"] = end_url
         if a.draft:
             inp["draft"] = True
+    elif kling:
+        # Kling 3.0: frames and characters in one request; std = 720p, pro = 1080p
+        inp = {"prompt": prompt, "sound": not a.no_audio, "duration": str(q["duration_s"]),
+               "mode": load_pricing()["video"][KLING]["modes"][q["resolution"]], "multi_shots": False}
+        if image_url:
+            inp["image_urls"] = [image_url] + ([end_url] if end_url else [])
+        else:
+            inp["aspect_ratio"] = a.aspect or "9:16"
+        if elements:
+            inp["kling_elements"] = elements
+        if a.camera_fixed or a.seed != -1:
+            log("  note: Kling 3.0 has no camera-fixed or seed option; ignored")
     else:
         inp = {"prompt": prompt, "image_url": image_url, "resolution": "1080p",
                "duration": str(q["duration_s"]), "camera_fixed": bool(a.camera_fixed), "seed": int(a.seed)}
@@ -930,6 +1004,7 @@ def main() -> None:
     p.add_argument("--duration", type=float)
     p.add_argument("--resolution", help="image: 1K/2K/4K; Seedance 2.5 video: 480p/720p/1080p")
     p.add_argument("--ref-video-seconds", type=float, help="length of a reference video (cheaper rate, billed on input + output)")
+    p.add_argument("--no-audio", action="store_true", help="Kling 3.0 costs less without sound")
     p.set_defaults(fn=cmd_quote)
 
     p = sub.add_parser("image")
@@ -954,19 +1029,21 @@ def main() -> None:
     p.add_argument("--mode", choices=["first", "first-last", "reference"],
                    help="Seedance 2.5: start frame only (default), start + end frame, or characters/references")
     p.add_argument("--end-image", help="end frame for --mode first-last")
-    p.add_argument("--character", action="append", help="character id or @tag (repeatable, --mode reference)")
+    p.add_argument("--character", action="append",
+                   help="character id or @tag (repeatable). Seedance: --mode reference only. Kling 3.0: any mode, up to 3")
     p.add_argument("--ref", action="append", help="extra reference image (repeatable, --mode reference)")
     p.add_argument("--ref-video", help="reference clip, e.g. the previous shot to continue (--mode reference)")
     p.add_argument("--ref-video-seconds", type=float, help="length of --ref-video when it is a URL")
-    p.add_argument("--aspect", help="--mode reference only: 9:16 (default), 16:9, 1:1, 4:3, 3:4, 21:9")
+    p.add_argument("--aspect", help="--mode reference only: 9:16 (default), 16:9, 1:1, 4:3, 3:4, 21:9 (Kling: 9:16, 16:9, 1:1)")
     p.add_argument("--prompt", required=True, help="short motion description")
-    p.add_argument("--model", choices=["2.5", "pro", "lite"], help="default 2.5")
+    p.add_argument("--model", choices=["2.5", KLING, "pro", "lite"], help="default 2.5")
     p.add_argument("--duration", type=float)
-    p.add_argument("--resolution", choices=["480p", "720p", "1080p"],
-                   help="Seedance 2.5 only: 480p (28 cr/s), 720p (63), 1080p (158). Pro/Lite are always 1080p")
+    p.add_argument("--resolution", choices=["480p", "720p", "1080p", "4K"],
+                   help="Seedance 2.5: 480p (28 cr/s), 720p (63), 1080p (158). Kling 3.0: 720p (20 with sound), "
+                        "1080p (27), 4K (67). Pro/Lite are always 1080p")
     p.add_argument("--draft", action="store_true",
                    help="Seedance 2.5 draft mode: 480p preview whose task id can be rendered at 1080p with 'finalize' within 7 days")
-    p.add_argument("--no-audio", action="store_true", help="Seedance 2.5: skip generated audio")
+    p.add_argument("--no-audio", action="store_true", help="Seedance 2.5 / Kling 3.0: skip generated audio")
     p.add_argument("--camera-fixed", action="store_true")
     p.add_argument("--seed", type=int, default=-1, help="-1 for random; reuse a seed to stay close to a previous clip")
     p.add_argument("--name")

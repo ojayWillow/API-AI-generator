@@ -36,6 +36,7 @@ cap would be exceeded.
 | Image with readable text, signs, posters, app UI | `gpt-image-2` | `gpt-image-2-text-to-image` | ~$0.05 |
 | Video, default | `2.5` | `bytedance/seedance-2-5` | 28 cr/s at 480p draft, 63 at 720p, 158 at 1080p |
 | Video, 1080p final of a draft | `finalize` command | `bytedance/seedance-2-5-draft` | 158 cr/s (same motion as the draft) |
+| Video, characters with start/end frames | `kling-3.0` | `kling-3.0/video` | 20 cr/s at 720p, 27 at 1080p (with sound) |
 | Video, legacy, only if asked | `pro` / `lite` | Seedance 1.0 | 14 / 10 cr/s at 1080p |
 
 The user works on Seedance 2.5 only. The loop is **draft then finalize**:
@@ -46,6 +47,11 @@ user asks for it. Draft ids expire 7 days after creation. Read
 `models/seedance-2-5-image-to-video.md` before the first video of a session.
 Video orientation is inherited from the still, so the still decides the
 aspect ratio.
+
+Use **Kling 3.0** when a saved character must stay recognisable in a shot that
+starts or ends on a specific still: it is the only model that takes frames and
+characters together, and it is about 6x cheaper than a Seedance 1080p final.
+It has no drafts; 720p is the cheap try. Read `models/kling-3-0.md` first.
 
 ## Workflow
 
@@ -139,7 +145,12 @@ python <skill>/scripts/kie.py characters list
   continuity, no character lock) or `--mode reference --ref-video <clip>.mp4
   --character reiks --prompt "Continue @Video1 seamlessly. Next: ..."` (keeps
   the face; the reference clip's seconds are billed at the lower with-video
-  rate, so quote with `--ref-video-seconds`).
+  rate, so quote with `--ref-video-seconds`). The reference clip must be 480p
+  or 720p, so extend a 1080p final from its draft.
+- **Start + end with the face locked (Kling 3.0):**
+  `video --model kling-3.0 --mode first-last --image start.png --end-image end.png --character reiks --prompt "@reiks <the move>" --resolution 720p --approve`.
+  The same works with `--mode first --image <clip>.last.png` to continue a shot
+  with the cast. Up to 3 characters, each with at least 2 photos.
 
 Read the "Three modes" section of `models/seedance-2-5-image-to-video.md`
 before using these.

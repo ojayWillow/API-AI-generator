@@ -36,6 +36,18 @@
       "id": "bytedance/seedance-2-5-draft",
       "credits_per_second": 158,
       "_note": "Renders an existing 480p draft at 1080p with the same motion. kie.ai does not publish a separate rate; the 1080p rate is assumed and the ledger stores the real charge."
+    },
+    "kling-3.0": {
+      "id": "kling-3.0/video",
+      "credits_per_second": { "720p": 14, "1080p": 18, "4K": 67 },
+      "credits_per_second_with_sound": { "720p": 20, "1080p": 27, "4K": 67 },
+      "_note": "kie.ai rates from https://kie.ai/kling-3-0: std = 720p, pro = 1080p. Sound costs more in std and pro. Takes a start frame, a start + end frame and up to 3 characters (2-4 photos each) in one request.",
+      "durations": [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      "resolutions": ["720p", "1080p", "4K"],
+      "default_resolution": "720p",
+      "modes": { "720p": "std", "1080p": "pro", "4K": "4K" },
+      "aspects": ["9:16", "16:9", "1:1"],
+      "max_characters": 3
     }
   }
 }

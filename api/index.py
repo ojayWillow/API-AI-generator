@@ -51,8 +51,15 @@ PRICING = {
                 "default_resolution": "480p"},
         # renders an existing 480p draft at 1080p with the same motion; kie.ai publishes no separate rate
         "2.5-final": {"id": "bytedance/seedance-2-5-draft", "credits_per_second": 158},
+        # Kling 3.0: start/end frames and up to 3 characters in one request; std = 720p, pro = 1080p
+        "kling-3.0": {"id": "kling-3.0/video", "credits_per_second": {"720p": 14, "1080p": 18, "4K": 67},
+                      "credits_per_second_with_sound": {"720p": 20, "1080p": 27, "4K": 67},
+                      "durations": list(range(3, 16)), "resolutions": ["720p", "1080p", "4K"],
+                      "default_resolution": "720p", "modes": {"720p": "std", "1080p": "pro", "4K": "4K"},
+                      "aspects": ["9:16", "16:9", "1:1"], "max_characters": 3},
     },
 }
+KLING = "kling-3.0"
 
 
 class ApiError(Exception):
@@ -386,6 +393,36 @@ def cast_prompt(prompt: str, chars: list[dict], first_index: int, video_tags: bo
     return " ".join(lines) + " " + body + " " + lock
 
 
+def kling_elements(prompt: str, chars: list[dict]) -> tuple[str, list[dict]]:
+    """Same logic as scripts/kie.py: saved characters become Kling 3.0 elements addressed as @name."""
+    if len(chars) > PRICING["video"][KLING]["max_characters"]:
+        raise ApiError(f"Kling 3.0 takes up to {PRICING['video'][KLING]['max_characters']} characters per clip")
+    elements, missing, used = [], [], set()
+    for c in chars:
+        label = c.get("name") or c.get("tag") or "character"
+        imgs = [str(i) for i in (c.get("images") or [])][:MAX_CHAR_IMAGES]
+        if len(imgs) < 2:
+            raise ApiError(f"Kling 3.0 needs at least 2 photos of {label}; add another in Cast")
+        name = re.sub(r"\W+", "_", str(c.get("tag") or label)).strip("_").lower() or "character"
+        while name in used:
+            name += "_2"
+        used.add(name)
+        pat = "@" + re.escape(c.get("tag") or "") + r"(?![\w-])"
+        if c.get("tag") and re.search(pat, prompt, flags=re.IGNORECASE):
+            prompt = re.sub(pat, lambda _m: "@" + name, prompt, flags=re.IGNORECASE)
+        else:
+            missing.append("@" + name)
+        desc = (c.get("description") or "").strip().rstrip(".")
+        elements.append({"name": name, "description": f"{label}: {desc}" if desc else label,
+                         "element_input_urls": imgs})
+    if missing:
+        body = prompt.strip()
+        if body and body[-1] not in ".!?":
+            body += "."
+        prompt = f"{body} Featuring {', '.join(missing)}."
+    return prompt, elements
+
+
 def list_refs() -> list[dict]:
     return index_read()["refs"][:200]
 
@@ -575,8 +612,12 @@ def quote(p: dict) -> dict:
         allowed = pr["durations"]
         dur = int(req) if req in allowed else min(allowed, key=lambda a: (abs(a - req), a))
         resolutions = pr.get("resolutions") or ["1080p"]
-        res = p.get("resolution") if p.get("resolution") in resolutions else (pr.get("default_resolution") or resolutions[-1])
+        if p.get("resolution") and p.get("resolution") not in resolutions:
+            raise ApiError(f"{model} renders {', '.join(resolutions)}, not {p.get('resolution')}")
+        res = p.get("resolution") or pr.get("default_resolution") or resolutions[-1]
         rate, billed = pr["credits_per_second"], dur
+        if p.get("audio") is not False and pr.get("credits_per_second_with_sound"):
+            rate = pr["credits_per_second_with_sound"]  # Kling charges more with sound
         if ref_s and pr.get("credits_per_second_with_video"):
             rate, billed = pr["credits_per_second_with_video"], dur + ref_s
         if isinstance(rate, dict):
@@ -651,12 +692,15 @@ def generate(p: dict) -> list[dict]:
         input_image = None
     else:
         mode = p.get("mode") or "first"
+        kling = q["model"] == KLING
         if mode not in ("first", "first-last", "reference"):
             raise ApiError("mode must be first, first-last or reference")
-        if mode != "first" and q["model"] != "2.5":
-            raise ApiError("start + end frames and references are Seedance 2.5 features")
+        if mode != "first" and q["model"] not in ("2.5", KLING):
+            raise ApiError("start + end frames and references need Seedance 2.5 or Kling 3.0")
         is_url = lambda u: bool(re.match(r"^https?://", u or ""))
         refs = [str(r).strip() for r in (p.get("refs") or []) if str(r).strip()] if mode == "reference" else []
+        if kling and (refs or (p.get("ref_video") or "").strip()):
+            raise ApiError("Kling 3.0 takes characters, not loose reference images or clips")
         image = (p.get("image") or "").strip() if mode != "reference" else ""
         if mode != "reference" and not is_url(image):
             raise ApiError("start frame must be a public URL; click Animate on a gallery image")
@@ -664,7 +708,19 @@ def generate(p: dict) -> list[dict]:
             end_image = (p.get("end_image") or "").strip()
             if not is_url(end_image):
                 raise ApiError("end frame must be a public URL; use 'Use as end frame' on a gallery image")
-        if mode == "reference":
+        elements = []
+        if kling:
+            if mode == "reference" and not chars:
+                raise ApiError("Cast mode needs at least one character")
+            if mode == "reference" and (p.get("aspect") or "9:16") not in PRICING["video"][KLING]["aspects"]:
+                raise ApiError("Kling 3.0 takes 9:16, 16:9 or 1:1")
+            if chars:
+                before = full_prompt
+                full_prompt, elements = kling_elements(full_prompt, chars)
+                if any(not is_url(u) for e in elements for u in e["element_input_urls"]):
+                    raise ApiError("character photos must be public URLs on the hosted dashboard")
+                sent_prompt = full_prompt if full_prompt != before else None
+        elif mode == "reference":
             ref_video = (p.get("ref_video") or "").strip() or None
             if any(not is_url(r) for r in refs + ([ref_video] if ref_video else [])):
                 raise ApiError("references must be public URLs on the hosted dashboard")
@@ -694,6 +750,15 @@ def generate(p: dict) -> list[dict]:
                     inp["last_frame_url"] = end_image
             if draft:
                 inp["draft"] = True
+        elif kling:
+            inp = {"prompt": full_prompt, "sound": audio, "duration": str(q["duration_s"]),
+                   "mode": PRICING["video"][KLING]["modes"][q["resolution"]], "multi_shots": False}
+            if mode == "reference":
+                inp["aspect_ratio"] = p.get("aspect") or "9:16"
+            else:
+                inp["image_urls"] = [image] + ([end_image] if end_image else [])
+            if elements:
+                inp["kling_elements"] = elements
         else:
             inp = {"prompt": full_prompt, "image_url": image, "resolution": "1080p", "duration": str(q["duration_s"]),
                    "camera_fixed": bool(p.get("camera_fixed")), "seed": seed}
@@ -780,8 +845,11 @@ def split_result(res: dict, urls: list, kind: str) -> tuple:
     src = vids[0] if vids else urls[0]
     last = None
     for k, v in res.items():
-        if isinstance(v, str) and v.startswith("http") and "last" in k.lower() and "frame" in k.lower():
-            last = v
+        if "last" in k.lower() and "frame" in k.lower():
+            # kie.ai documents Seedance 2.x as {resultUrls: [], lastFrameUrl: []}: a list, not a string
+            v = next((x for x in v if isinstance(x, str)), None) if isinstance(v, list) else v
+            if isinstance(v, str) and v.startswith("http"):
+                last = v
     if not last:
         imgs = [u for u in urls if u != src and ext(u) in {"png", "jpg", "jpeg", "webp"}]
         last = imgs[0] if imgs else None

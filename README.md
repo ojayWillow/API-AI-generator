@@ -89,6 +89,10 @@ clip. The create panel is built for iteration, not single shots:
   this" drafts the matching end still with the same people and lighting.
 - **Three video modes.** Start frame, Start + end, or Cast (characters,
   reference images, a reference clip). Seedance 2.5 takes one per request.
+- **Kling 3.0 for locked faces.** Pick Kling 3.0 as the video model and the
+  cast works in every mode, including Start + end: the shot lands on your end
+  still and up to 3 characters keep their faces. About $1.35 per 10 s at 1080p
+  with sound. No drafts; 720p is the cheap try. Each character needs 2+ photos.
 - **Extend two ways.** "Extend from last frame" uses the last frame Seedance
   now returns (no browser capture). "Extend with cast" feeds the clip back as
   `@Video1` with its characters, so faces hold across the cut.
@@ -147,6 +151,7 @@ code 3 means it would exceed a spend cap.
 | Video (default) | Seedance 1.0 Pro | `bytedance/v1-pro-image-to-video` |
 | Video (budget) | Seedance 1.0 Lite | `bytedance/v1-lite-image-to-video` |
 | Video (on request) | Seedance 2.5 | `bytedance/seedance-2-5` |
+| Video with characters + start/end frames | Kling 3.0 | `kling-3.0/video` |
 
 Prices in `scripts/pricing.json` are estimates. The ledger stores the real
 `creditsConsumed` that kie.ai reports after each job. Check

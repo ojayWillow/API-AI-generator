@@ -366,9 +366,9 @@ def build_args(p: dict) -> list[str]:
     else:
         mode = p.get("mode") or "first"
         args += ["--mode", mode]
+        for c in p.get("characters") or []:  # Kling takes characters in every mode; kie.py checks the rest
+            args += ["--character", str(c)]
         if mode == "reference":
-            for c in p.get("characters") or []:
-                args += ["--character", str(c)]
             for r in p.get("refs") or []:
                 if str(r).strip():
                     args += ["--ref", resolve_image(str(r))]
@@ -498,6 +498,8 @@ def quote_cost(p: dict) -> dict:
         args += ["--resolution", "480p" if (kind == "video" and p.get("draft")) else str(p["resolution"])]
     if kind == "video" and p.get("mode") == "reference" and p.get("ref_video") and p.get("ref_video_s"):
         args += ["--ref-video-seconds", str(p["ref_video_s"])]
+    if kind == "video" and p.get("audio") is False:
+        args.append("--no-audio")
     _, data, _ = run_kie(args, timeout=60)
     allow_multi = kind == "image" or (kind == "video" and p.get("draft"))
     count = max(1, min(4, int(p.get("count") or 1))) if allow_multi else 1
