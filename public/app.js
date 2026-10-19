@@ -729,11 +729,15 @@
         toast("Describe what changed. Then use the result as the end frame.", 4000); break;
       case "tochar": addToCharacter(g, el); break;
       case "extendcast": {
+        // kie.ai only takes 480p/720p reference clips, so a 1080p clip is extended from its 480p draft.
+        const big = (x) => x.model === "2.5-final" || (x.params && x.params.resolution === "1080p") || !!(x.media && x.media.width * x.media.height > 927408);
+        const src = big(g) ? state.generations.find(x => x.id === g.parent_id && !big(x)) : g;
+        if (!src) { toast("kie.ai only takes 480p or 720p clips as a reference, so this 1080p clip can't be extended with cast. Use Extend from last frame.", 6000); break; }
         closeViewer(); setKind("video"); vmode = "reference";
-        const secs = (g.media && g.media.duration_s) || (g.params && g.params.duration_s) || 0;
+        const secs = (src.media && src.media.duration_s) || (src.params && src.params.duration_s) || 0;
         if (secs > 15) toast("Long clip: kie.ai caps reference clips at 30 s in total, and every second is billed.", 5000);
-        refVideo = {ref: refOf(g), url: g.url, name: g.name, seconds: secs};
-        if (!secs) clipSeconds(g.url).then(s => { if (refVideo && refVideo.url === g.url && s) { refVideo.seconds = s; renderRefVideo(); estimate(); } });
+        refVideo = {ref: refOf(src), url: src.url, name: src.name, seconds: secs};
+        if (!secs) clipSeconds(src.url).then(s => { if (refVideo && refVideo.url === src.url && s) { refVideo.seconds = s; renderRefVideo(); estimate(); } });
         restoreCast(g); refSel.length = 0;
         manualPrompt = true; $("prompt").value = "Continue @Video1 seamlessly from its final frame, same camera and lighting. Next: ";
         settings.vres = "480p"; settings.duration = (g.params && g.params.duration_s) || 10;

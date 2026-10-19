@@ -25,7 +25,7 @@ request shape from 1.0.
 
 | `last_frame_url` | single public URL | end frame; needs `first_frame_url` (mode `first-last`) |
 | `reference_image_urls` | up to 30 URLs | mode `reference`; addressed in the prompt as `@Image1`, `@Image2`… by position |
-| `reference_video_urls` | up to 10 URLs, 30 s total | mode `reference`; `@Video1`… Billed input + output seconds at 17/38/95 cr/s |
+| `reference_video_urls` | up to 10 URLs, 30 s total, each 2–30 s, **480p/720p only** (409,600–927,408 px) | mode `reference`; `@Video1`… Billed input + output seconds at 17/38/95 cr/s. A 1080p final can't be passed; extend its 480p draft instead |
 | `reference_audio_urls` | up to 10 URLs, 30 s total | mode `reference`; `@Audio1`… (not wired into the skill yet) |
 | `return_last_frame` | bool | the skill always sets it; the last frame is saved as `<clip>.last.png` for extending |
 | `draft` | bool | 480p only. The resulting task id can be rendered at 1080p for 7 days |
