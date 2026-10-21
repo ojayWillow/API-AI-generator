@@ -705,7 +705,8 @@ def generate(p: dict) -> list[dict]:
         for r in refs:
             if not re.match(r"^https?://", r):
                 raise ApiError("reference images must be public URLs on the hosted dashboard")
-        per = photos_per_character(chars, len(refs), MAX_REFS["nano-banana-2"])
+        # gpt-image-2 sends no references, so only nano-banana-2's refs count toward its cap
+        per = photos_per_character(chars, len(refs) if q["model"] == "nano-banana-2" else 0, MAX_REFS["nano-banana-2"])
         sent_refs = character_images(chars, per) + refs  # job["refs"] keeps only the user's own refs
         if chars:
             full_prompt = sent_prompt = cast_prompt(full_prompt, chars, 1, video_tags=False, per=per)

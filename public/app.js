@@ -916,11 +916,13 @@
         // Rerun a whole shootout: Kling's take keeps the prompt's @tags and the cast
         const all = state.generations.filter(x => x.group === g.group), base = all.find(x => x.model === KLING) || g;
         await action("redo", base, el, host);
-        const ms = SHOOT.filter(m => all.some(x => x.model === m));
+        // a Kling take that failed or is still rendering this session still counts, but its cast can't be restored
+        const ms = SHOOT.filter(m => all.some(x => x.model === m) || [...jobs.values()].some(j => j.group === g.group && j.model === m));
         settings.shoot = true; settings.shootModels = ms.length >= 2 ? ms : [...SHOOT];
         settings.tier = all.some(x => x.params && SHOOT_RES.keeper[x.model] === x.params.resolution) ? "keeper" : "try";
         syncVModel(); applyVMode(); renderCastPick(); renderPills(); estimate();
-        toast("Shootout loaded. Change the motion, approve, generate.");
+        toast(base.model !== KLING && settings.shootModels.includes(KLING)
+          ? "Shootout loaded. Kling's take isn't here, so pick the cast again if Kling should keep faces." : "Shootout loaded. Change the motion, approve, generate.", 6000);
         break; }
       case "redo":
         closeViewer(); setKind("video"); settings.shoot = false;

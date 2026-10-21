@@ -777,7 +777,8 @@ def cmd_image(a: argparse.Namespace) -> None:
         log("  note: characters need reference images; switching to nano-banana-2")
         model = "nano-banana-2"
         q = quote_image(model, resolution)
-    per = photos_per_character(chars, len(a.ref or []), MAX_REFS["nano-banana-2"])
+    # gpt-image-2 sends no references, so only nano-banana-2's refs count toward its cap
+    per = photos_per_character(chars, len(a.ref or []) if model == "nano-banana-2" else 0, MAX_REFS["nano-banana-2"])
     prompt = cast_prompt(a.prompt, chars, 1, video_tags=False, per=per)
     refs = [ensure_url(r) for r in character_images(chars, per) + (a.ref or [])]
     if model == "nano-banana-2":
