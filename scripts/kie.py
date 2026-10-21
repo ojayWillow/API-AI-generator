@@ -12,13 +12,15 @@ Commands
   image    --prompt P [--model nano-banana-2|gpt-image-2] [--aspect 9:16]
            [--resolution 1K|2K|4K] [--ref URL_OR_PATH ...] [--character ID ...] [--name slug]
   upload   --file PATH                      host a local file on kie.ai (24 h)
-  video    --prompt P [--model 2.5|kling-3.0|pro|lite] [--draft] [--resolution 480p|720p|1080p|4K]
-           [--duration N] [--name slug] --approve, plus one of three modes:
+  video    --prompt P [--model 2.5|wan-3.0|minimax-h3|kling-3.0|pro|lite] [--draft]
+           [--resolution 480p|720p|768p|1080p|2K|4K] [--duration N] [--name slug] --approve,
+           plus one of three modes:
              --mode first       --image START            (default; the only mode for pro/lite)
              --mode first-last  --image START --end-image END
              --mode reference   [--character ID ...] [--ref IMG ...] [--ref-video MP4]
-           Seedance 2.5 takes characters in reference mode only. Kling 3.0 takes up to 3
-           --character in every mode, so start + end frames and faces lock together.
+           Seedance 2.5 and Wan 3.0 take characters in reference mode only. Kling 3.0 takes up
+           to 3 --character in every mode, so start + end frames and faces lock together.
+           MiniMax H3 animates frames only (first, first-last); no characters.
   characters list | add --name N --image P [--image P ...] [--description D] | remove --id ID
   finalize --draft-task-id ID --approve      render a 2.5 draft at 1080p
   status   --task-id ID
@@ -77,11 +79,21 @@ DEFAULT_PRICING = {
                       "credits_per_second_with_sound": {"720p": 20, "1080p": 27, "4K": 67},
                       "durations": list(range(3, 16)), "resolutions": ["720p", "1080p", "4K"],
                       "default_resolution": "720p", "modes": {"720p": "std", "1080p": "pro", "4K": "4K"}},
+        "wan-3.0": {"id": "wan/3-0-video", "credits_per_second": {"480p": 8, "720p": 16, "1080p": 32},
+                    "bills_input_video": True, "durations": list(range(2, 31)),
+                    "resolutions": ["480p", "720p", "1080p"], "default_resolution": "720p",
+                    "aspects": ["9:16", "16:9", "1:1", "4:3", "3:4"], "max_refs": 10,
+                    "min_ref_video_s": 1, "max_ref_video_s": 15, "max_total_s": 30},
+        "minimax-h3": {"id": "minimax-h3/image-to-video", "credits_per_second": {"768p": 8, "2K": 13},
+                       "durations": list(range(4, 16)), "resolutions": ["768p", "2K"], "default_resolution": "2K"},
     },
 }
 KLING = "kling-3.0"
 KLING_ASPECTS = ("9:16", "16:9", "1:1")
 KLING_MAX_CHARACTERS = 3
+WAN = "wan-3.0"  # Seedance's modes at about a fifth of the price; references are Image1.., Video1 without '@'
+WAN_ASPECTS = ("9:16", "16:9", "1:1", "4:3", "3:4")
+H3 = "minimax-h3"  # frames only (start, or start + end); audio is always on
 
 
 def load_pricing() -> dict:
@@ -223,11 +235,13 @@ def find_character(key: str) -> dict:
 
 
 MAX_CHAR_IMAGES = 4  # per character; the first images hold identity best
-MAX_REFS = {"nano-banana-2": 14, "seedance": 30}  # reference images kie.ai accepts per request
+MAX_REFS = {"nano-banana-2": 14, "seedance": 30, WAN: 10}  # reference images kie.ai accepts per request
 
 
 def photos_per_character(chars: list[dict], n_refs: int, cap: int) -> int:
     """How many photos each character can send so characters + extra refs fit under the model's cap."""
+    if n_refs > cap:
+        die(f"too many reference images: {n_refs}, the model takes {cap}")
     if not chars:
         return MAX_CHAR_IMAGES
     sent = lambda k: sum(min(len(c.get("images") or []), k) for c in chars) + n_refs
@@ -237,17 +251,25 @@ def photos_per_character(chars: list[dict], n_refs: int, cap: int) -> int:
     return per
 
 
+def ref_names(prompt: str, at: str) -> str:
+    """Write Image1/Video1 references the way the model reads them: Seedance '@Image1', Wan 'Image1'."""
+    if at:
+        return re.sub(r"(?<![@\w])(Image|Video)(\d+)\b", r"@\1\2", prompt)
+    return re.sub(r"@(Image|Video)(\d+)\b", r"\1\2", prompt)
+
+
 def tag_pattern(tag: str) -> str:
     return "@" + re.escape(tag) + r"(?![\w-])"  # @anna must not match inside @anna-2
 
 
 def cast_prompt(prompt: str, chars: list[dict], first_index: int, video_tags: bool,
-                per: int = MAX_CHAR_IMAGES) -> str:
+                per: int = MAX_CHAR_IMAGES, at: str = "@") -> str:
     """Bind each character to its reference images and keep identity locked.
 
     Seedance 2.5 addresses reference images as @Image1..@ImageN by position, so
-    "@reiks" in the prompt becomes "Reiks (@Image1 @Image2)". Nano Banana has no
-    tag syntax, so images are named by number instead. Same logic as api/index.py.
+    "@reiks" in the prompt becomes "Reiks (@Image1 @Image2)". Wan 3.0 uses the same
+    names without the '@' (at=""). Nano Banana has no tag syntax, so images are
+    named by number instead. Same logic as api/index.py.
     """
     if not chars:
         return prompt
@@ -255,7 +277,7 @@ def cast_prompt(prompt: str, chars: list[dict], first_index: int, video_tags: bo
     for c in chars:
         n = min(len(c.get("images") or []), per)
         nums = list(range(idx, idx + n))
-        label = " ".join(f"@Image{i}" for i in nums) if video_tags else \
+        label = " ".join(f"{at}Image{i}" for i in nums) if video_tags else \
             ("reference image " if n == 1 else "reference images ") + ", ".join(str(i) for i in nums)
         name = c.get("name") or c.get("tag") or "character"
         tag = c.get("tag") or ""
@@ -622,10 +644,17 @@ def quote_video(model: str, duration: float, resolution: str | None = None, ref_
     if audio and pr[model].get("credits_per_second_with_sound"):
         rate = pr[model]["credits_per_second_with_sound"]  # Kling charges more with sound
     billed = dur
-    if ref_video_s and pr[model].get("credits_per_second_with_video"):
-        # kie.ai bills reference-video seconds plus output seconds at a lower rate
-        rate = pr[model]["credits_per_second_with_video"]
+    if ref_video_s and (pr[model].get("credits_per_second_with_video") or pr[model].get("bills_input_video")):
+        # kie.ai bills reference-video seconds plus output seconds (Seedance at a lower rate, Wan at the same rate)
+        rate = pr[model].get("credits_per_second_with_video") or rate
         billed = dur + float(ref_video_s)
+    lo, hi, total = pr[model].get("min_ref_video_s") or 0, pr[model].get("max_ref_video_s"), pr[model].get("max_total_s")
+    name = {WAN: "Wan 3.0"}.get(model, model)
+    if ref_video_s and hi and not lo <= float(ref_video_s) <= hi:
+        die(f"{name} takes reference clips of {lo:g}-{hi} s; this one is {float(ref_video_s):g} s")
+    if ref_video_s and total and dur + float(ref_video_s) > total:
+        die(f"{name} caps the reference clip plus the new part at {total} s ({float(ref_video_s):g} s in + "
+            f"{dur} s out); ask for --duration {int(total - float(ref_video_s))} or less")
     if isinstance(rate, dict):
         rate = rate.get(res) or max(rate.values())
     credits = int(round(rate * billed))
@@ -748,7 +777,8 @@ def cmd_image(a: argparse.Namespace) -> None:
         log("  note: characters need reference images; switching to nano-banana-2")
         model = "nano-banana-2"
         q = quote_image(model, resolution)
-    per = photos_per_character(chars, len(a.ref or []), MAX_REFS["nano-banana-2"])
+    # gpt-image-2 sends no references, so only nano-banana-2's refs count toward its cap
+    per = photos_per_character(chars, len(a.ref or []) if model == "nano-banana-2" else 0, MAX_REFS["nano-banana-2"])
     prompt = cast_prompt(a.prompt, chars, 1, video_tags=False, per=per)
     refs = [ensure_url(r) for r in character_images(chars, per) + (a.ref or [])]
     if model == "nano-banana-2":
@@ -789,11 +819,13 @@ def check_still(ref: str, label: str) -> None:
 def cmd_video(a: argparse.Namespace) -> None:
     model = a.model or "2.5"
     mode = a.mode or ("first-last" if a.end_image else "reference" if (a.character or a.ref or a.ref_video) and not a.image else "first")
-    kling = model == KLING
+    kling, wan, h3 = model == KLING, model == WAN, model == H3
     if a.draft and model != "2.5":
-        die("--draft is a Seedance 2.5 feature; Kling's cheap preview is --resolution 720p")
-    if mode != "first" and model not in ("2.5", KLING):
-        die(f"--mode {mode} needs Seedance 2.5 or Kling 3.0")
+        die("--draft is a Seedance 2.5 feature; for a cheap try render this model at a lower --resolution")
+    if mode != "first" and model not in ("2.5", WAN, KLING, H3):
+        die(f"--mode {mode} needs Seedance 2.5, Wan 3.0, Kling 3.0 or MiniMax H3")
+    if mode == "reference" and h3:
+        die("MiniMax H3 animates frames only: use --mode first or first-last, or --model wan-3.0 / kling-3.0 for characters")
     if mode in ("first", "first-last") and not a.image:
         die("--image (the start frame) is required for this mode")
     if mode == "first-last" and not a.end_image:
@@ -802,14 +834,19 @@ def cmd_video(a: argparse.Namespace) -> None:
         die("--mode reference takes no --image or --end-image; use --mode first or first-last for frames")
     if kling and (a.ref or a.ref_video):
         die("Kling 3.0 takes characters (--character), not loose --ref images or --ref-video clips")
-    if not kling and mode != "reference" and (a.character or a.ref or a.ref_video):
-        die("Seedance 2.5 takes characters and references only in --mode reference, never with a start frame. "
-            "Use --model kling-3.0 to lock faces with start and end frames, or put the character into the stills.")
+    if h3 and (a.character or a.ref or a.ref_video):
+        die("MiniMax H3 takes no characters or references. Put the cast into the start and end stills, "
+            "or use --model kling-3.0 to lock faces with start and end frames.")
+    if not (kling or h3) and mode != "reference" and (a.character or a.ref or a.ref_video):
+        die(f"{'Wan 3.0' if wan else 'Seedance'} takes characters and references only in --mode reference, never with "
+            "a start frame. Use --model kling-3.0 to lock faces with start and end frames, or put the character into the stills.")
     chars = [find_character(c) for c in (a.character or [])]
     if mode == "reference" and not (chars or a.ref or a.ref_video):
         die("--mode reference needs at least one --character" + ("" if kling else ", --ref or --ref-video"))
     if kling and (a.aspect or "9:16") not in KLING_ASPECTS and not a.image:
         die(f"Kling 3.0 takes --aspect {', '.join(KLING_ASPECTS)}")
+    if wan and mode == "reference" and (a.aspect or "9:16") not in WAN_ASPECTS:
+        die(f"Wan 3.0 takes --aspect {', '.join(WAN_ASPECTS)}")
 
     ref_video_s = 0.0
     if a.ref_video:
@@ -817,6 +854,7 @@ def cmd_video(a: argparse.Namespace) -> None:
         ref_video_s = a.ref_video_seconds or ((mp4_info(lv) or {}).get("duration_s") if lv else 0) or 0
         if not ref_video_s:
             die("could not read the reference video length; pass --ref-video-seconds")
+    # quote_video also checks Wan's clip limits (1-15 s, clip + new part within 30 s)
     q = quote_video(model, a.duration or 10, "480p" if a.draft else a.resolution, ref_video_s, not a.no_audio)
     s = enforce_caps(q["usd_est"], a.override_cap)
     if not a.approve:
@@ -838,10 +876,12 @@ def cmd_video(a: argparse.Namespace) -> None:
         for e in elements:
             e["element_input_urls"] = [ensure_url(u) for u in e["element_input_urls"]]
     elif mode == "reference":
-        per = photos_per_character(chars, len(a.ref or []), MAX_REFS["seedance"])
+        per = photos_per_character(chars, len(a.ref or []), MAX_REFS[WAN if wan else "seedance"])
         refs = [ensure_url(r) for r in character_images(chars, per) + (a.ref or [])]
         video_refs = [ensure_url(a.ref_video)] if a.ref_video else []
-        prompt = cast_prompt(prompt, chars, 1, video_tags=True, per=per)
+        prompt = ref_names(cast_prompt(prompt, chars, 1, video_tags=True, per=per, at="" if wan else "@"),
+                           "" if wan else "@")
+    audio = h3 or not a.no_audio  # MiniMax H3 always renders sound
 
     if model == "2.5":
         inp = {"prompt": prompt, "duration": q["duration_s"], "resolution": q["resolution"],
@@ -871,6 +911,32 @@ def cmd_video(a: argparse.Namespace) -> None:
             inp["kling_elements"] = elements
         if a.camera_fixed or a.seed != -1:
             log("  note: Kling 3.0 has no camera-fixed or seed option; ignored")
+    elif wan:
+        # Wan 3.0: Seedance's three modes; references are named Image1.., Video1 in the prompt
+        inp = {"prompt": prompt, "duration": q["duration_s"], "resolution": q["resolution"].upper(), "audio": audio}
+        if mode == "reference":
+            inp["aspect_ratio"] = a.aspect or "9:16"
+            if refs:
+                inp["reference_image_urls"] = refs
+            if video_refs:
+                inp["reference_video_urls"] = video_refs
+        else:
+            inp["first_frame_url"] = image_url
+            inp["aspect_ratio"] = "adaptive"
+            if end_url:
+                inp["last_frame_url"] = end_url
+        if a.seed != -1:
+            inp["seed"] = int(a.seed)
+        if a.camera_fixed:
+            log("  note: Wan 3.0 has no camera-fixed option; ignored")
+    elif h3:
+        # MiniMax H3: a start frame, or a start + end frame; 768P or 2K, sound always on
+        inp = {"prompt": prompt, "duration": q["duration_s"], "resolution": q["resolution"].upper(),
+               "first_frame_url": image_url}
+        if end_url:
+            inp["last_frame_url"] = end_url
+        if a.camera_fixed or a.seed != -1 or a.no_audio:
+            log("  note: MiniMax H3 has no camera-fixed, seed or silent option; ignored")
     else:
         inp = {"prompt": prompt, "image_url": image_url, "resolution": "1080p",
                "duration": str(q["duration_s"]), "camera_fixed": bool(a.camera_fixed), "seed": int(a.seed)}
@@ -886,7 +952,7 @@ def cmd_video(a: argparse.Namespace) -> None:
     name = a.name or stem or f"{dt.datetime.now():%Y%m%d-%H%M%S}-{slugify(a.prompt)}"
     finish("video", task, model, q["model_id"], a.prompt,
            {"duration_s": q["duration_s"], "resolution": q["resolution"], "camera_fixed": bool(a.camera_fixed),
-            "seed": int(a.seed), "draft": bool(a.draft), "generate_audio": not a.no_audio, "mode": mode,
+            "seed": int(a.seed), "draft": bool(a.draft), "generate_audio": audio, "mode": mode,
             "ref_video_s": ref_video_s or None, "aspect_ratio": inp.get("aspect_ratio")},
            name, "mp4", q["credits_est"],
            {"input_image": a.image, "input_image_url": image_url, "preset": a.preset,
@@ -1002,9 +1068,10 @@ def main() -> None:
     p.add_argument("--kind", choices=["image", "video", "final"], required=True)
     p.add_argument("--model")
     p.add_argument("--duration", type=float)
-    p.add_argument("--resolution", help="image: 1K/2K/4K; Seedance 2.5 video: 480p/720p/1080p")
-    p.add_argument("--ref-video-seconds", type=float, help="length of a reference video (cheaper rate, billed on input + output)")
-    p.add_argument("--no-audio", action="store_true", help="Kling 3.0 costs less without sound")
+    p.add_argument("--resolution", help="image: 1K/2K/4K; video: 480p/720p/1080p (Seedance, Wan), 720p/1080p/4K (Kling), 768p/2K (MiniMax H3)")
+    p.add_argument("--ref-video-seconds", type=float,
+                   help="length of a reference video; billed on input + output (Seedance at a lower rate, Wan 3.0 at the same rate)")
+    p.add_argument("--no-audio", action="store_true", help="Kling 3.0 costs less without sound; MiniMax H3 always has sound")
     p.set_defaults(fn=cmd_quote)
 
     p = sub.add_parser("image")
@@ -1027,23 +1094,24 @@ def main() -> None:
     p = sub.add_parser("video")
     p.add_argument("--image", help="start frame: local path or public URL (modes first and first-last)")
     p.add_argument("--mode", choices=["first", "first-last", "reference"],
-                   help="Seedance 2.5: start frame only (default), start + end frame, or characters/references")
+                   help="start frame only (default), start + end frame, or characters/references (Seedance 2.5, Wan 3.0, Kling 3.0)")
     p.add_argument("--end-image", help="end frame for --mode first-last")
     p.add_argument("--character", action="append",
-                   help="character id or @tag (repeatable). Seedance: --mode reference only. Kling 3.0: any mode, up to 3")
+                   help="character id or @tag (repeatable). Seedance / Wan: --mode reference only. Kling 3.0: any mode, up to 3")
     p.add_argument("--ref", action="append", help="extra reference image (repeatable, --mode reference)")
     p.add_argument("--ref-video", help="reference clip, e.g. the previous shot to continue (--mode reference)")
     p.add_argument("--ref-video-seconds", type=float, help="length of --ref-video when it is a URL")
-    p.add_argument("--aspect", help="--mode reference only: 9:16 (default), 16:9, 1:1, 4:3, 3:4, 21:9 (Kling: 9:16, 16:9, 1:1)")
+    p.add_argument("--aspect", help="--mode reference only: 9:16 (default), 16:9, 1:1, 4:3, 3:4, 21:9 (Kling: 9:16, 16:9, 1:1; Wan: no 21:9)")
     p.add_argument("--prompt", required=True, help="short motion description")
-    p.add_argument("--model", choices=["2.5", KLING, "pro", "lite"], help="default 2.5")
+    p.add_argument("--model", choices=["2.5", WAN, H3, KLING, "pro", "lite"], help="default 2.5")
     p.add_argument("--duration", type=float)
-    p.add_argument("--resolution", choices=["480p", "720p", "1080p", "4K"],
-                   help="Seedance 2.5: 480p (28 cr/s), 720p (63), 1080p (158). Kling 3.0: 720p (20 with sound), "
-                        "1080p (27), 4K (67). Pro/Lite are always 1080p")
+    p.add_argument("--resolution", choices=["480p", "720p", "768p", "1080p", "2K", "4K"],
+                   help="Seedance 2.5: 480p (28 cr/s), 720p (63), 1080p (158). Wan 3.0: 480p (8), 720p (16), 1080p (32). "
+                        "MiniMax H3: 768p (8), 2K (13). Kling 3.0: 720p (20 with sound), 1080p (27), 4K (67). "
+                        "Pro/Lite are always 1080p")
     p.add_argument("--draft", action="store_true",
                    help="Seedance 2.5 draft mode: 480p preview whose task id can be rendered at 1080p with 'finalize' within 7 days")
-    p.add_argument("--no-audio", action="store_true", help="Seedance 2.5 / Kling 3.0: skip generated audio")
+    p.add_argument("--no-audio", action="store_true", help="Seedance 2.5 / Wan 3.0 / Kling 3.0: skip generated audio")
     p.add_argument("--camera-fixed", action="store_true")
     p.add_argument("--seed", type=int, default=-1, help="-1 for random; reuse a seed to stay close to a previous clip")
     p.add_argument("--name")

@@ -37,9 +37,11 @@ cap would be exceeded.
 | Video, default | `2.5` | `bytedance/seedance-2-5` | 28 cr/s at 480p draft, 63 at 720p, 158 at 1080p |
 | Video, 1080p final of a draft | `finalize` command | `bytedance/seedance-2-5-draft` | 158 cr/s (same motion as the draft) |
 | Video, characters with start/end frames | `kling-3.0` | `kling-3.0/video` | 20 cr/s at 720p, 27 at 1080p (with sound) |
+| Video, best value (Seedance's modes at ~1/5 the price) | `wan-3.0` | `wan/3-0-video` | 16 cr/s at 720p, 32 at 1080p (sound included) |
+| Video, animate a still (start or start + end) | `minimax-h3` | `minimax-h3/image-to-video` | 8 cr/s at 768p, 13 at 2K (sound always on) |
 | Video, legacy, only if asked | `pro` / `lite` | Seedance 1.0 | 14 / 10 cr/s at 1080p |
 
-The user works on Seedance 2.5 only. The loop is **draft then finalize**:
+Seedance 2.5 is the default and the hero-shot model. Its loop is **draft then finalize**:
 make one or more 480p drafts with `--draft` (about $1.40 per 10 s each), let
 the user pick, then run `finalize --draft-task-id <id>` to render that exact
 draft at 1080p (about $7.90 per 10 s). Never render 1080p directly unless the
@@ -52,6 +54,14 @@ Use **Kling 3.0** when a saved character must stay recognisable in a shot that
 starts or ends on a specific still: it is the only model that takes frames and
 characters together, and it is about 6x cheaper than a Seedance 1080p final.
 It has no drafts; 720p is the cheap try. Read `models/kling-3-0.md` first.
+
+Use **Wan 3.0** when the user wants Seedance's modes (frames, Cast, extend
+with a clip) for less: a 10 s clip is $0.80 at 720p and $1.60 at 1080p with
+sound. It names references `Image1` and `Video1` without `@`. Use **MiniMax
+H3** to animate a still: start frame or start + end only, no characters,
+$0.65 per 10 s at 2K. Neither has drafts. Read `models/wan-3-0.md` or
+`models/minimax-h3.md` first. In October 2026 both ranked level with or
+above Seedance 2.5 in blind votes, so suggest them when cost matters.
 
 ## Workflow
 
@@ -151,6 +161,12 @@ python <skill>/scripts/kie.py characters list
   `video --model kling-3.0 --mode first-last --image start.png --end-image end.png --character reiks --prompt "@reiks <the move>" --resolution 720p --approve`.
   The same works with `--mode first --image <clip>.last.png` to continue a shot
   with the cast. Up to 3 characters, each with at least 2 photos.
+- **Same modes, a fifth of the price (Wan 3.0):**
+  `video --model wan-3.0 --mode reference --character reiks --prompt "@reiks raps to camera, one continuous shot" --resolution 720p --approve`.
+  To extend with the cast: `--mode reference --ref-video <clip>.mp4 --ref-video-seconds <s> --character reiks --prompt "Continue Video1 seamlessly. Next: ..."`
+  (no `@` before `Video1`; the clip may be up to 15 s and 1080p, and its seconds are billed at the same rate).
+- **Animate a still (MiniMax H3):**
+  `video --model minimax-h3 --image still.png [--mode first-last --end-image end.png] --prompt "<the move>" --resolution 2K --approve`.
 
 Read the "Three modes" section of `models/seedance-2-5-image-to-video.md`
 before using these.

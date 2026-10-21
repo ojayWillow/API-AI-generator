@@ -57,9 +57,21 @@ PRICING = {
                       "durations": list(range(3, 16)), "resolutions": ["720p", "1080p", "4K"],
                       "default_resolution": "720p", "modes": {"720p": "std", "1080p": "pro", "4K": "4K"},
                       "aspects": ["9:16", "16:9", "1:1"], "max_characters": 3},
+        # Wan 3.0: Seedance's three modes at about a fifth of the price; references are Image1.., Video1 (no '@').
+        # With a reference clip kie.ai bills input + output seconds at the same rate.
+        "wan-3.0": {"id": "wan/3-0-video", "credits_per_second": {"480p": 8, "720p": 16, "1080p": 32},
+                    "bills_input_video": True, "durations": list(range(2, 31)),
+                    "resolutions": ["480p", "720p", "1080p"], "default_resolution": "720p",
+                    "aspects": ["9:16", "16:9", "1:1", "4:3", "3:4"], "max_refs": 10,
+                    "min_ref_video_s": 1, "max_ref_video_s": 15, "max_total_s": 30},
+        # MiniMax H3: animates a start frame or a start + end frame; sound is always on
+        "minimax-h3": {"id": "minimax-h3/image-to-video", "credits_per_second": {"768p": 8, "2K": 13},
+                       "durations": list(range(4, 16)), "resolutions": ["768p", "2K"], "default_resolution": "2K"},
     },
 }
 KLING = "kling-3.0"
+WAN = "wan-3.0"
+H3 = "minimax-h3"
 
 
 class ApiError(Exception):
@@ -297,7 +309,7 @@ def save_upload(p: dict) -> dict:
 # ---------------------------------------------------------------------------
 MAX_CHAR_IMAGES = 4  # sent per character; the first images hold identity best
 MAX_PHOTOS = 8  # stored per character
-MAX_REFS = {"nano-banana-2": 14, "seedance": 30}  # reference images kie.ai accepts per request
+MAX_REFS = {"nano-banana-2": 14, "seedance": 30, WAN: 10}  # reference images kie.ai accepts per request
 
 
 def save_character(p: dict) -> dict:
@@ -352,6 +364,8 @@ def characters_by_id(ids: list) -> list[dict]:
 
 def photos_per_character(chars: list[dict], n_refs: int, cap: int) -> int:
     """How many photos each character can send so characters + extra refs fit under the model's cap."""
+    if n_refs > cap:
+        raise ApiError(f"too many reference images: {n_refs}, the model takes {cap}")
     if not chars:
         return MAX_CHAR_IMAGES
     sent = lambda k: sum(min(len(c.get("images") or []), k) for c in chars) + n_refs
@@ -359,6 +373,13 @@ def photos_per_character(chars: list[dict], n_refs: int, cap: int) -> int:
     if per < 1:
         raise ApiError(f"too many references: {len(chars)} characters plus {n_refs} images, the model takes {cap}")
     return per
+
+
+def ref_names(prompt: str, at: str) -> str:
+    """Same as scripts/kie.py: Seedance reads '@Image1' / '@Video1', Wan reads 'Image1' / 'Video1'."""
+    if at:
+        return re.sub(r"(?<![@\w])(Image|Video)(\d+)\b", r"@\1\2", prompt)
+    return re.sub(r"@(Image|Video)(\d+)\b", r"\1\2", prompt)
 
 
 def character_images(chars: list[dict], per: int = MAX_CHAR_IMAGES) -> list[str]:
@@ -369,15 +390,15 @@ def character_images(chars: list[dict], per: int = MAX_CHAR_IMAGES) -> list[str]
 
 
 def cast_prompt(prompt: str, chars: list[dict], first_index: int, video_tags: bool,
-                per: int = MAX_CHAR_IMAGES) -> str:
-    """Same logic as scripts/kie.py: bind each character to its images and lock identity."""
+                per: int = MAX_CHAR_IMAGES, at: str = "@") -> str:
+    """Same logic as scripts/kie.py: bind each character to its images and lock identity (Wan: at="")."""
     if not chars:
         return prompt
     lines, idx = [], first_index
     for c in chars:
         n = min(len(c.get("images") or []), per)
         nums = list(range(idx, idx + n))
-        label = " ".join(f"@Image{i}" for i in nums) if video_tags else \
+        label = " ".join(f"{at}Image{i}" for i in nums) if video_tags else \
             ("reference image " if n == 1 else "reference images ") + ", ".join(str(i) for i in nums)
         name = c.get("name") or c.get("tag") or "character"
         if c.get("tag"):
@@ -603,8 +624,10 @@ def quote(p: dict) -> dict:
                 ref_s = float(p.get("ref_video_s") or 0)
             except (TypeError, ValueError):
                 ref_s = 0.0
-            if not 0 < ref_s <= 30:
-                raise ApiError("reference clip length is unknown or over kie.ai's 30 s limit; pass ref_video_s")
+            lo, cap = pr.get("min_ref_video_s") or 0, pr.get("max_ref_video_s") or 30
+            if not (0 < ref_s and lo <= ref_s <= cap):
+                rng = f"{lo:g}-{cap} s range" if lo else f"{cap} s limit"
+                raise ApiError(f"reference clip length is unknown or outside {model}'s {rng}; pass ref_video_s")
         try:
             req = float(p.get("duration") or 10)
         except (TypeError, ValueError):
@@ -618,8 +641,12 @@ def quote(p: dict) -> dict:
         rate, billed = pr["credits_per_second"], dur
         if p.get("audio") is not False and pr.get("credits_per_second_with_sound"):
             rate = pr["credits_per_second_with_sound"]  # Kling charges more with sound
-        if ref_s and pr.get("credits_per_second_with_video"):
-            rate, billed = pr["credits_per_second_with_video"], dur + ref_s
+        if ref_s and (pr.get("credits_per_second_with_video") or pr.get("bills_input_video")):
+            # Seedance bills input + output seconds at a lower rate, Wan at the same rate
+            rate, billed = pr.get("credits_per_second_with_video") or rate, dur + ref_s
+        if ref_s and pr.get("max_total_s") and dur + ref_s > pr["max_total_s"]:
+            raise ApiError(f"{model} caps the reference clip plus the new part at {pr['max_total_s']} s; "
+                           f"ask for {int(pr['max_total_s'] - ref_s)} s or less")
         if isinstance(rate, dict):
             rate = rate.get(res) or max(rate.values())
         c = int(round(rate * billed))
@@ -678,7 +705,8 @@ def generate(p: dict) -> list[dict]:
         for r in refs:
             if not re.match(r"^https?://", r):
                 raise ApiError("reference images must be public URLs on the hosted dashboard")
-        per = photos_per_character(chars, len(refs), MAX_REFS["nano-banana-2"])
+        # gpt-image-2 sends no references, so only nano-banana-2's refs count toward its cap
+        per = photos_per_character(chars, len(refs) if q["model"] == "nano-banana-2" else 0, MAX_REFS["nano-banana-2"])
         sent_refs = character_images(chars, per) + refs  # job["refs"] keeps only the user's own refs
         if chars:
             full_prompt = sent_prompt = cast_prompt(full_prompt, chars, 1, video_tags=False, per=per)
@@ -692,15 +720,19 @@ def generate(p: dict) -> list[dict]:
         input_image = None
     else:
         mode = p.get("mode") or "first"
-        kling = q["model"] == KLING
+        kling, wan, h3 = q["model"] == KLING, q["model"] == WAN, q["model"] == H3
         if mode not in ("first", "first-last", "reference"):
             raise ApiError("mode must be first, first-last or reference")
-        if mode != "first" and q["model"] not in ("2.5", KLING):
-            raise ApiError("start + end frames and references need Seedance 2.5 or Kling 3.0")
+        if mode != "first" and q["model"] not in ("2.5", WAN, KLING, H3):
+            raise ApiError("start + end frames and references need Seedance 2.5, Wan 3.0, Kling 3.0 or MiniMax H3")
+        if mode == "reference" and h3:
+            raise ApiError("MiniMax H3 animates frames only; use Wan 3.0 or Kling 3.0 for Cast mode")
         is_url = lambda u: bool(re.match(r"^https?://", u or ""))
         refs = [str(r).strip() for r in (p.get("refs") or []) if str(r).strip()] if mode == "reference" else []
         if kling and (refs or (p.get("ref_video") or "").strip()):
             raise ApiError("Kling 3.0 takes characters, not loose reference images or clips")
+        if h3 and chars:
+            raise ApiError("MiniMax H3 takes no characters. Put the cast into the start and end stills, or use Kling 3.0.")
         image = (p.get("image") or "").strip() if mode != "reference" else ""
         if mode != "reference" and not is_url(image):
             raise ApiError("start frame must be a public URL; click Animate on a gallery image")
@@ -724,17 +756,21 @@ def generate(p: dict) -> list[dict]:
             ref_video = (p.get("ref_video") or "").strip() or None
             if any(not is_url(r) for r in refs + ([ref_video] if ref_video else [])):
                 raise ApiError("references must be public URLs on the hosted dashboard")
-            per = photos_per_character(chars, len(refs), MAX_REFS["seedance"])
+            if wan and (p.get("aspect") or "9:16") not in PRICING["video"][WAN]["aspects"]:
+                raise ApiError("Wan 3.0 takes 9:16, 16:9, 1:1, 4:3 or 3:4")
+            per = photos_per_character(chars, len(refs), MAX_REFS[WAN if wan else "seedance"])
             sent_refs = character_images(chars, per) + refs
             if not sent_refs and not ref_video:
                 raise ApiError("reference mode needs at least one character, reference image or reference clip")
-            if chars:
-                full_prompt = sent_prompt = cast_prompt(full_prompt, chars, 1, video_tags=True, per=per)
+            before = full_prompt
+            full_prompt = ref_names(cast_prompt(full_prompt, chars, 1, video_tags=True, per=per,
+                                                at="" if wan else "@"), "" if wan else "@")
+            sent_prompt = full_prompt if full_prompt != before else None
         elif chars:
-            raise ApiError("Seedance 2.5 cannot mix characters with a start frame. Lock the character into the "
-                           "start and end stills instead, or switch to Cast mode.")
+            raise ApiError(f"{'Wan 3.0' if wan else 'Seedance'} cannot mix characters with a start frame. Lock the "
+                           "character into the start and end stills instead, switch to Cast mode, or use Kling 3.0.")
         draft = bool(p.get("draft")) and q["model"] == "2.5"
-        audio = p.get("audio") is not False
+        audio = h3 or p.get("audio") is not False  # MiniMax H3 always renders sound
         if q["model"] == "2.5":
             inp = {"prompt": full_prompt, "duration": q["duration_s"], "resolution": q["resolution"],
                    "generate_audio": audio, "output_format": "mp4", "return_last_frame": True}
@@ -759,6 +795,25 @@ def generate(p: dict) -> list[dict]:
                 inp["image_urls"] = [image] + ([end_image] if end_image else [])
             if elements:
                 inp["kling_elements"] = elements
+        elif wan:
+            inp = {"prompt": full_prompt, "duration": q["duration_s"], "resolution": q["resolution"].upper(), "audio": audio}
+            if mode == "reference":
+                inp["aspect_ratio"] = p.get("aspect") or "9:16"
+                if sent_refs:
+                    inp["reference_image_urls"] = sent_refs
+                if ref_video:
+                    inp["reference_video_urls"] = [ref_video]
+            else:
+                inp.update(first_frame_url=image, aspect_ratio="adaptive")
+                if end_image:
+                    inp["last_frame_url"] = end_image
+            if seed != -1:
+                inp["seed"] = seed
+        elif h3:
+            inp = {"prompt": full_prompt, "duration": q["duration_s"], "resolution": q["resolution"].upper(),
+                   "first_frame_url": image}
+            if end_image:
+                inp["last_frame_url"] = end_image
         else:
             inp = {"prompt": full_prompt, "image_url": image, "resolution": "1080p", "duration": str(q["duration_s"]),
                    "camera_fixed": bool(p.get("camera_fixed")), "seed": seed}
