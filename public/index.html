@@ -78,6 +78,7 @@
   .promptbox .bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
   .mini { display: inline-flex; align-items: center; gap: 6px; background: var(--ctl-2); border: none; border-radius: 7px; padding: 5px 9px; font-size: 12px; color: var(--ink-2); cursor: pointer; }
   .mini.on { color: var(--ink); background: var(--accent-soft); }
+  .vmodes button:disabled, .mini:disabled, .pill:disabled { opacity: .45; cursor: not-allowed; }
   .frag { font-size: 11px; color: var(--muted); margin-top: 6px; }
   .modelrow { display: flex; align-items: center; gap: 10px; background: var(--ctl); border-radius: 10px; padding: 6px 12px; min-height: 48px; }
   .modelrow .k { font-size: 11px; color: var(--muted); }
@@ -298,7 +299,7 @@
       <input type="text" class="url" id="endStill" placeholder="…or paste an image URL">
     </div>
     <div class="block hidden" id="refVideoBlock">
-      <div class="lbl"><span>Reference clip</span><span class="muted">@Video1</span></div>
+      <div class="lbl"><span>Reference clip</span><span class="muted" id="rvTag">@Video1</span></div>
       <div class="drop" id="refVideo"></div>
     </div>
 
@@ -308,6 +309,7 @@
         <button type="button" class="mini" id="helperBtn">Prompt helper</button>
         <button type="button" class="mini on hidden" id="pillAudio">Audio on</button>
         <button type="button" class="mini hidden" id="pillCam">Camera fixed</button>
+        <button type="button" class="mini hidden" id="pillShoot" title="Send the same shot to Wan 3.0, MiniMax H3 and Kling 3.0 at once, then keep the best take">Shootout</button>
       </div>
       <div class="frag" id="presetFrag"></div>
       <div id="helper" class="hidden" style="margin-top:8px;display:grid;gap:6px">
@@ -332,7 +334,8 @@
     <div class="modelrow"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/></svg>
       <div style="flex:1;min-width:0"><div class="k">Model</div>
         <select id="imgModel"><option value="nano-banana-2">Nano Banana 2</option><option value="gpt-image-2">GPT Image 2 · readable text</option></select>
-        <select id="vidModel" class="hidden" title="Seedance 2.5 drafts cheaply and runs up to 15 s. Kling 3.0 keeps your cast with start and end frames."><option value="2.5">Seedance 2.5</option><option value="kling-3.0">Kling 3.0 (cast + frames)</option></select>
+        <select id="vidModel" class="hidden" title="Seedance 2.5 for hero shots. Wan 3.0 has the same modes for about a fifth of the price. MiniMax H3 animates a still. Kling 3.0 keeps your cast with start and end frames."><option value="2.5">Seedance 2.5 (hero shots)</option><option value="wan-3.0">Wan 3.0 (best value)</option><option value="minimax-h3">MiniMax H3 (animate a still)</option><option value="kling-3.0">Kling 3.0 (cast + frames)</option></select>
+        <div id="shootSummary" class="hidden" style="font-weight:600;overflow-wrap:anywhere"></div>
       </div>
     </div>
 

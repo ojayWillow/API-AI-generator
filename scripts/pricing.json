@@ -48,6 +48,27 @@
       "modes": { "720p": "std", "1080p": "pro", "4K": "4K" },
       "aspects": ["9:16", "16:9", "1:1"],
       "max_characters": 3
+    },
+    "wan-3.0": {
+      "id": "wan/3-0-video",
+      "credits_per_second": { "480p": 8, "720p": 16, "1080p": 32 },
+      "bills_input_video": true,
+      "_note": "kie.ai rates from https://kie.ai/wan3.0-video (20% below Alibaba's list price), audio included. Same three modes as Seedance 2.5: start frame, start + end, or references (Image1.., Video1). With a reference clip, kie.ai bills input + output seconds at this rate. #1 on Artificial Analysis text-to-video, Oct 2026.",
+      "durations": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30],
+      "resolutions": ["480p", "720p", "1080p"],
+      "default_resolution": "720p",
+      "aspects": ["9:16", "16:9", "1:1", "4:3", "3:4"],
+      "max_refs": 10,
+      "max_ref_video_s": 15,
+      "max_total_s": 30
+    },
+    "minimax-h3": {
+      "id": "minimax-h3/image-to-video",
+      "credits_per_second": { "768p": 8, "2K": 13 },
+      "_note": "kie.ai rates from https://kie.ai/minimax-h3 (50% of MiniMax's price). Animates a start frame, or a start + end frame. Stereo audio is always on. No characters or references. #1 image-to-video on Artificial Analysis and LMArena, Oct 2026.",
+      "durations": [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      "resolutions": ["768p", "2K"],
+      "default_resolution": "2K"
     }
   }
 }

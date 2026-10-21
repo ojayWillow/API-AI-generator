@@ -93,6 +93,15 @@ clip. The create panel is built for iteration, not single shots:
   cast works in every mode, including Start + end: the shot lands on your end
   still and up to 3 characters keep their faces. About $1.35 per 10 s at 1080p
   with sound. No drafts; 720p is the cheap try. Each character needs 2+ photos.
+- **Wan 3.0 for value, MiniMax H3 for stills.** Wan 3.0 takes the same three
+  modes as Seedance 2.5 (frames, Cast, extend with a clip) for about a fifth of
+  the price: $1.60 per 10 s at 1080p with sound. MiniMax H3 animates a start
+  frame, or start + end, for $0.65 per 10 s at 2K. Both ranked level with or
+  above Seedance 2.5 in blind votes in October 2026.
+- **Shootout.** Press Shootout under the prompt and the same shot goes to Wan
+  3.0, MiniMax H3 and Kling 3.0 at once. The takes land side by side; star the
+  best and the others are rejected. Try sizes cost about $2.20 for 10 s across
+  all three with sound, Keeper sizes about $3.60.
 - **Extend two ways.** "Extend from last frame" uses the last frame Seedance
   now returns (no browser capture). "Extend with cast" feeds the clip back as
   `@Video1` with its characters, so faces hold across the cut.
@@ -148,10 +157,11 @@ code 3 means it would exceed a spend cap.
 |---|---|---|
 | Image (default) | Nano Banana 2 | `nano-banana-2` |
 | Image with readable text or UI | GPT Image 2 | `gpt-image-2-text-to-image` |
-| Video (default) | Seedance 1.0 Pro | `bytedance/v1-pro-image-to-video` |
-| Video (budget) | Seedance 1.0 Lite | `bytedance/v1-lite-image-to-video` |
-| Video (on request) | Seedance 2.5 | `bytedance/seedance-2-5` |
+| Video (default, hero shots) | Seedance 2.5 | `bytedance/seedance-2-5` |
+| Video, best value, same modes as Seedance | Wan 3.0 | `wan/3-0-video` |
+| Video, animate a still | MiniMax H3 | `minimax-h3/image-to-video` |
 | Video with characters + start/end frames | Kling 3.0 | `kling-3.0/video` |
+| Video (legacy, on request) | Seedance 1.0 Pro / Lite | `bytedance/v1-pro-image-to-video`, `bytedance/v1-lite-image-to-video` |
 
 Prices in `scripts/pricing.json` are estimates. The ledger stores the real
 `creditsConsumed` that kie.ai reports after each job. Check
