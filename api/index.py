@@ -63,7 +63,7 @@ PRICING = {
                     "bills_input_video": True, "durations": list(range(2, 31)),
                     "resolutions": ["480p", "720p", "1080p"], "default_resolution": "720p",
                     "aspects": ["9:16", "16:9", "1:1", "4:3", "3:4"], "max_refs": 10,
-                    "max_ref_video_s": 15, "max_total_s": 30},
+                    "min_ref_video_s": 1, "max_ref_video_s": 15, "max_total_s": 30},
         # MiniMax H3: animates a start frame or a start + end frame; sound is always on
         "minimax-h3": {"id": "minimax-h3/image-to-video", "credits_per_second": {"768p": 8, "2K": 13},
                        "durations": list(range(4, 16)), "resolutions": ["768p", "2K"], "default_resolution": "2K"},
@@ -364,6 +364,8 @@ def characters_by_id(ids: list) -> list[dict]:
 
 def photos_per_character(chars: list[dict], n_refs: int, cap: int) -> int:
     """How many photos each character can send so characters + extra refs fit under the model's cap."""
+    if n_refs > cap:
+        raise ApiError(f"too many reference images: {n_refs}, the model takes {cap}")
     if not chars:
         return MAX_CHAR_IMAGES
     sent = lambda k: sum(min(len(c.get("images") or []), k) for c in chars) + n_refs
@@ -371,6 +373,13 @@ def photos_per_character(chars: list[dict], n_refs: int, cap: int) -> int:
     if per < 1:
         raise ApiError(f"too many references: {len(chars)} characters plus {n_refs} images, the model takes {cap}")
     return per
+
+
+def ref_names(prompt: str, at: str) -> str:
+    """Same as scripts/kie.py: Seedance reads '@Image1' / '@Video1', Wan reads 'Image1' / 'Video1'."""
+    if at:
+        return re.sub(r"(?<![@\w])(Image|Video)(\d+)\b", r"@\1\2", prompt)
+    return re.sub(r"@(Image|Video)(\d+)\b", r"\1\2", prompt)
 
 
 def character_images(chars: list[dict], per: int = MAX_CHAR_IMAGES) -> list[str]:
@@ -615,9 +624,10 @@ def quote(p: dict) -> dict:
                 ref_s = float(p.get("ref_video_s") or 0)
             except (TypeError, ValueError):
                 ref_s = 0.0
-            cap = pr.get("max_ref_video_s") or 30
-            if not 0 < ref_s <= cap:
-                raise ApiError(f"reference clip length is unknown or over {model}'s {cap} s limit; pass ref_video_s")
+            lo, cap = pr.get("min_ref_video_s") or 0, pr.get("max_ref_video_s") or 30
+            if not (0 < ref_s and lo <= ref_s <= cap):
+                rng = f"{lo:g}-{cap} s range" if lo else f"{cap} s limit"
+                raise ApiError(f"reference clip length is unknown or outside {model}'s {rng}; pass ref_video_s")
         try:
             req = float(p.get("duration") or 10)
         except (TypeError, ValueError):
@@ -751,9 +761,10 @@ def generate(p: dict) -> list[dict]:
             sent_refs = character_images(chars, per) + refs
             if not sent_refs and not ref_video:
                 raise ApiError("reference mode needs at least one character, reference image or reference clip")
-            if chars:
-                full_prompt = sent_prompt = cast_prompt(full_prompt, chars, 1, video_tags=True, per=per,
-                                                        at="" if wan else "@")
+            before = full_prompt
+            full_prompt = ref_names(cast_prompt(full_prompt, chars, 1, video_tags=True, per=per,
+                                                at="" if wan else "@"), "" if wan else "@")
+            sent_prompt = full_prompt if full_prompt != before else None
         elif chars:
             raise ApiError(f"{'Wan 3.0' if wan else 'Seedance'} cannot mix characters with a start frame. Lock the "
                            "character into the start and end stills instead, switch to Cast mode, or use Kling 3.0.")

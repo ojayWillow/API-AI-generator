@@ -83,7 +83,7 @@ DEFAULT_PRICING = {
                     "bills_input_video": True, "durations": list(range(2, 31)),
                     "resolutions": ["480p", "720p", "1080p"], "default_resolution": "720p",
                     "aspects": ["9:16", "16:9", "1:1", "4:3", "3:4"], "max_refs": 10,
-                    "max_ref_video_s": 15, "max_total_s": 30},
+                    "min_ref_video_s": 1, "max_ref_video_s": 15, "max_total_s": 30},
         "minimax-h3": {"id": "minimax-h3/image-to-video", "credits_per_second": {"768p": 8, "2K": 13},
                        "durations": list(range(4, 16)), "resolutions": ["768p", "2K"], "default_resolution": "2K"},
     },
@@ -93,8 +93,6 @@ KLING_ASPECTS = ("9:16", "16:9", "1:1")
 KLING_MAX_CHARACTERS = 3
 WAN = "wan-3.0"  # Seedance's modes at about a fifth of the price; references are Image1.., Video1 without '@'
 WAN_ASPECTS = ("9:16", "16:9", "1:1", "4:3", "3:4")
-WAN_MAX_REF_VIDEO_S = 15  # per request; input clip + output must stay within 30 s
-WAN_MAX_TOTAL_S = 30
 H3 = "minimax-h3"  # frames only (start, or start + end); audio is always on
 
 
@@ -242,6 +240,8 @@ MAX_REFS = {"nano-banana-2": 14, "seedance": 30, WAN: 10}  # reference images ki
 
 def photos_per_character(chars: list[dict], n_refs: int, cap: int) -> int:
     """How many photos each character can send so characters + extra refs fit under the model's cap."""
+    if n_refs > cap:
+        die(f"too many reference images: {n_refs}, the model takes {cap}")
     if not chars:
         return MAX_CHAR_IMAGES
     sent = lambda k: sum(min(len(c.get("images") or []), k) for c in chars) + n_refs
@@ -249,6 +249,13 @@ def photos_per_character(chars: list[dict], n_refs: int, cap: int) -> int:
     if per < 1:
         die(f"too many references: {len(chars)} characters plus {n_refs} images, the model takes {cap}")
     return per
+
+
+def ref_names(prompt: str, at: str) -> str:
+    """Write Image1/Video1 references the way the model reads them: Seedance '@Image1', Wan 'Image1'."""
+    if at:
+        return re.sub(r"(?<![@\w])(Image|Video)(\d+)\b", r"@\1\2", prompt)
+    return re.sub(r"@(Image|Video)(\d+)\b", r"\1\2", prompt)
 
 
 def tag_pattern(tag: str) -> str:
@@ -641,6 +648,13 @@ def quote_video(model: str, duration: float, resolution: str | None = None, ref_
         # kie.ai bills reference-video seconds plus output seconds (Seedance at a lower rate, Wan at the same rate)
         rate = pr[model].get("credits_per_second_with_video") or rate
         billed = dur + float(ref_video_s)
+    lo, hi, total = pr[model].get("min_ref_video_s") or 0, pr[model].get("max_ref_video_s"), pr[model].get("max_total_s")
+    name = {WAN: "Wan 3.0"}.get(model, model)
+    if ref_video_s and hi and not lo <= float(ref_video_s) <= hi:
+        die(f"{name} takes reference clips of {lo:g}-{hi} s; this one is {float(ref_video_s):g} s")
+    if ref_video_s and total and dur + float(ref_video_s) > total:
+        die(f"{name} caps the reference clip plus the new part at {total} s ({float(ref_video_s):g} s in + "
+            f"{dur} s out); ask for --duration {int(total - float(ref_video_s))} or less")
     if isinstance(rate, dict):
         rate = rate.get(res) or max(rate.values())
     credits = int(round(rate * billed))
@@ -839,12 +853,8 @@ def cmd_video(a: argparse.Namespace) -> None:
         ref_video_s = a.ref_video_seconds or ((mp4_info(lv) or {}).get("duration_s") if lv else 0) or 0
         if not ref_video_s:
             die("could not read the reference video length; pass --ref-video-seconds")
-        if wan and ref_video_s > WAN_MAX_REF_VIDEO_S:
-            die(f"Wan 3.0 takes reference clips up to {WAN_MAX_REF_VIDEO_S} s; this one is {ref_video_s:g} s")
+    # quote_video also checks Wan's clip limits (1-15 s, clip + new part within 30 s)
     q = quote_video(model, a.duration or 10, "480p" if a.draft else a.resolution, ref_video_s, not a.no_audio)
-    if wan and ref_video_s and q["duration_s"] + ref_video_s > WAN_MAX_TOTAL_S:
-        die(f"Wan 3.0 caps the reference clip plus the new part at {WAN_MAX_TOTAL_S} s ({ref_video_s:g} s in + "
-            f"{q['duration_s']} s out); ask for --duration {int(WAN_MAX_TOTAL_S - ref_video_s)} or less")
     s = enforce_caps(q["usd_est"], a.override_cap)
     if not a.approve:
         out({"ok": False, "approval_required": True,
@@ -868,7 +878,8 @@ def cmd_video(a: argparse.Namespace) -> None:
         per = photos_per_character(chars, len(a.ref or []), MAX_REFS[WAN if wan else "seedance"])
         refs = [ensure_url(r) for r in character_images(chars, per) + (a.ref or [])]
         video_refs = [ensure_url(a.ref_video)] if a.ref_video else []
-        prompt = cast_prompt(prompt, chars, 1, video_tags=True, per=per, at="" if wan else "@")
+        prompt = ref_names(cast_prompt(prompt, chars, 1, video_tags=True, per=per, at="" if wan else "@"),
+                           "" if wan else "@")
     audio = h3 or not a.no_audio  # MiniMax H3 always renders sound
 
     if model == "2.5":
@@ -1057,7 +1068,8 @@ def main() -> None:
     p.add_argument("--model")
     p.add_argument("--duration", type=float)
     p.add_argument("--resolution", help="image: 1K/2K/4K; video: 480p/720p/1080p (Seedance, Wan), 720p/1080p/4K (Kling), 768p/2K (MiniMax H3)")
-    p.add_argument("--ref-video-seconds", type=float, help="length of a reference video (cheaper rate, billed on input + output)")
+    p.add_argument("--ref-video-seconds", type=float,
+                   help="length of a reference video; billed on input + output (Seedance at a lower rate, Wan 3.0 at the same rate)")
     p.add_argument("--no-audio", action="store_true", help="Kling 3.0 costs less without sound; MiniMax H3 always has sound")
     p.set_defaults(fn=cmd_quote)
 

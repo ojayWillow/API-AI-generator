@@ -102,9 +102,13 @@ clip. The create panel is built for iteration, not single shots:
   3.0, MiniMax H3 and Kling 3.0 at once. The takes land side by side; star the
   best and the others are rejected. Try sizes cost about $2.20 for 10 s across
   all three with sound, Keeper sizes about $3.60.
-- **Extend two ways.** "Extend from last frame" uses the last frame Seedance
-  now returns (no browser capture). "Extend with cast" feeds the clip back as
-  `@Video1` with its characters, so faces hold across the cut.
+- **Extend two ways.** "Extend from last frame" continues on the clip's own
+  model: Seedance returns its last frame, and for Kling, Wan and H3 clips the
+  browser captures it. "Extend with cast" feeds the clip back with its
+  characters, so faces hold across the cut. Seedance clips continue on
+  Seedance as `@Video1` (a 1080p final goes from its 480p draft). Kling, Wan
+  and H3 clips, and finals with no draft, continue on Wan 3.0 as `Video1`:
+  clips up to 15 s at any size, with the clip's seconds billed at Wan's rate.
 - **Draft then finalize for Seedance 2.5.** Clips are made as 480p drafts
   (28 credits per second, so about $1.40 per 10 s), one to four at a time.
   Press Finalize on the keeper and kie.ai re-renders that exact draft at 1080p

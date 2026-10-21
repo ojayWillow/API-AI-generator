@@ -59,6 +59,7 @@
       "default_resolution": "720p",
       "aspects": ["9:16", "16:9", "1:1", "4:3", "3:4"],
       "max_refs": 10,
+      "min_ref_video_s": 1,
       "max_ref_video_s": 15,
       "max_total_s": 30
     },

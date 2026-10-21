@@ -264,7 +264,14 @@
     } else { settings[it.key] = it.v; if (it.key === "vres" && it.v !== "480p") settings.count = 1; }
     renderPills(); estimate(); }); });
   $("pillAudio").onclick = () => { $("audio").checked = !$("audio").checked; renderPills(); estimate(); };
-  $("vidModel").onchange = () => { settings.vres = cap().defRes; syncVModel(); applyVMode(); renderPills(); };  // each model starts at its default size (Seedance: a cheap draft)
+  $("vidModel").onchange = () => {
+    settings.vres = cap().defRes;  // each model starts at its default size (Seedance: a cheap draft)
+    const at = cap().at;  // Seedance reads @Video1, Wan reads Video1
+    if (at != null) $("prompt").value = $("prompt").value.replace(/@?\b(Image|Video)(\d+)\b/g, (_, k, n) => at + k + n);
+    const src = vm() === "2.5" && refVideo && state.generations.find(x => refOf(x) === refVideo.ref);
+    if (src && bigClip(src)) { refVideo = null; toast("Seedance only takes 480p or 720p clips, so the clip was removed. Wan 3.0 can extend it.", 6000); }
+    syncVModel(); applyVMode(); renderPills();
+  };
   $("pillShoot").onclick = () => { settings.shoot = !settings.shoot; syncVModel(); applyVMode(); renderPills(); };
   $("pillCam").onclick = () => { $("cameraFixed").checked = !$("cameraFixed").checked; renderPills(); };
   $("imgModel").onchange = () => { renderRefs(); estimate(); };
@@ -480,7 +487,8 @@
   function renderRefVideo() {
     const host = $("refVideo"), tag = (cap().at != null ? cap().at : "@") + "Video1";  // Wan names it Video1, Seedance @Video1
     $("rvTag").textContent = tag;
-    if (!refVideo) { host.innerHTML = `<div class="hint">Optional. Use <b>Extend with cast</b> on a clip to continue it with the same people. Clip seconds are billed at a lower rate.</div>`; return; }
+    const billing = cap().at === "" ? "Clips up to 15 s; their seconds are billed at the same rate as the new part." : "Clip seconds are billed at a lower rate.";
+    if (!refVideo) { host.innerHTML = `<div class="hint">Optional. Use <b>Extend with cast</b> on a clip to continue it with the same people. ${billing}</div>`; return; }
     host.innerHTML = `<div class="srcrow"><video src="${esc(refVideo.url)}" muted playsinline preload="metadata" style="width:44px;height:60px;object-fit:cover;border-radius:6px"></video><div class="grow"><div class="ellip">${esc(refVideo.name)}</div><div class="muted">${refVideo.seconds ? refVideo.seconds.toFixed(1) + "s · " + tag : tag}</div></div><button type="button" class="btn ic" id="rvClear" title="Remove">${ICON.x}</button></div>`;
     $("rvClear").onclick = () => { refVideo = null; renderRefVideo(); estimate(); };
   }
@@ -610,9 +618,10 @@
   // Only Kling takes the cast, so the other models get the characters' names in place of their @tags.
   function shootPayloads(p) {
     const group = "shoot-" + Date.now().toString(36);
-    const named = chars().reduce((t, c) => c.tag ? t.replace(new RegExp("@" + c.tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\w-])", "gi"), () => c.name || c.tag) : t, p.prompt);
+    const untag = (cs) => cs.reduce((t, c) => c.tag ? t.replace(new RegExp("@" + c.tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\w-])", "gi"), () => c.name || c.tag) : t, p.prompt);
+    const named = untag(chars()), forKling = untag(chars().filter(c => !castSel.includes(c.id)));
     return shootModels().map(m => ({...p, model: m, resolution: SHOOT_RES[settings.tier][m], draft: false, count: 1, group,
-      prompt: m === KLING ? p.prompt : named, characters: m === KLING ? [...castSel] : [], seed: "", camera_fixed: false}));
+      prompt: m === KLING ? forKling : named, characters: m === KLING ? [...castSel] : [], seed: "", camera_fixed: false}));
   }
   async function submit(p) {
     const j = await api("/api/generate", p);
@@ -676,6 +685,8 @@
     (g.refs || []).filter(r => !charImgs.has(r)).slice(0, 3).forEach(r => refSel.push({ref: r, url: thumbUrl(r) || r, name: String(r).split(/[\\/]/).pop()}));
   }
   const isDraft = (g) => isVideoItem(g) && g.params && g.params.draft;
+  // kie.ai's Seedance takes only 480p/720p reference clips; Wan takes up to 4096 px
+  const bigClip = (x) => x.model === "2.5-final" || (x.params && ["1080p", "2K", "4K"].includes(x.params.resolution)) || !!(x.media && x.media.width * x.media.height > 927408);
   const finalOf = (g) => state.generations.find(x => x.parent_id === g.id && x.model === "2.5-final");
   function finalCost(g) { const pr = state.pricing && state.pricing.video["2.5-final"]; return fmtUsd(((pr && pr.credits_per_second) || 158) * ((g.params && g.params.duration_s) || 0) * (state.usd_per_credit || 0.005)); }
   function daysLeft(g) { return g.created_at ? Math.max(0, Math.ceil((new Date(g.created_at).getTime() + 7 * 864e5 - Date.now()) / 864e5)) : null; }
@@ -734,7 +745,7 @@
       </div></div>`;
   }
   const takeLabel = (g) => g.variant ? "v" + g.variant : (MODEL_LABEL[g.model] || g.model || "");
-  const isShootout = (all) => new Set(all.map(x => x.model)).size > 1;
+  const isShootout = (all) => all.some(x => String(x.group || "").startsWith("shoot-"));
   function setRowHtml(gs, all) {
     const g0 = gs[0], picked = all.find(x => x.rating === "star"), shoot = isShootout(all);
     const noun = shoot ? "takes" : isVideoItem(g0) ? "drafts" : "stills";
@@ -746,7 +757,7 @@
         <div class="muted">${esc(fmtDate(g0.created_at || g0.modified))}</div>
         <div class="prompt">${esc(g0.prompt || "")}</div>
         <div class="note">${picked ? `Picked ${esc(takeLabel(picked))}. ` : ""}Hover a ${noun.slice(0, -1)} and press ★ to pick it; the others are rejected.</div>
-        <div class="actions"><button class="btn act" data-a="${g0.kind === "image" ? "tweak" : "redo"}">${ICON.rerun}Rerun</button>${picked ? primaryAction(picked).replace('class="btn', `data-id="${esc(picked.id)}" class="btn`) : ""}</div>
+        <div class="actions"><button class="btn act" data-a="${shoot ? "reshoot" : g0.kind === "image" ? "tweak" : "redo"}">${ICON.rerun}Rerun</button>${picked ? primaryAction(picked).replace('class="btn', `data-id="${esc(picked.id)}" class="btn`) : ""}</div>
       </div></div>`;
   }
   function gridCard(g) {
@@ -861,9 +872,8 @@
       case "extendcast": {
         // Seedance clips continue on Seedance; Kling, Wan and H3 clips on Wan 3.0, which takes clips up to 4096 px and 15 s.
         // kie.ai's Seedance only takes 480p/720p clips, so a 1080p Seedance clip goes from its 480p draft, or to Wan when there is none.
-        const big = (x) => x.model === "2.5-final" || (x.params && x.params.resolution === "1080p") || !!(x.media && x.media.width * x.media.height > 927408);
         let wan = !["2.5", "2.5-final"].includes(g.model);
-        let src = wan || !big(g) ? g : state.generations.find(x => x.id === g.parent_id && !big(x));
+        let src = wan || !bigClip(g) ? g : state.generations.find(x => x.id === g.parent_id && !bigClip(x));
         if (!src) { wan = true; src = g; }
         const secs = (src.media && src.media.duration_s) || (src.params && src.params.duration_s) || 0, w = VM[WAN];
         if (wan && secs > w.maxClip) { toast(`Wan 3.0 takes reference clips up to ${w.maxClip} s and this one is ${Math.round(secs)} s. Use Extend from last frame.`, 6000); break; }
@@ -901,6 +911,16 @@
       case "hires": {
         const next = resOf() === "1K" ? "2K" : "4K"; toast(`Generating a ${next} version…`);
         try { await submit({kind: "image", prompt: g.prompt, negative: g.negative || "", fields: g.fields || null, model: g.model === "gpt-image-2" ? "gpt-image-2" : "nano-banana-2", aspect: (g.params && g.params.aspect_ratio) || "9:16", resolution: next, count: 1, name: stem + "-" + next, refs: g.model === "gpt-image-2" ? [] : [refOf(g)], parent_id: g.id, preset: g.preset || null}); closeViewer(); showView("create"); } catch (e) { toast(e.message, 4000); }
+        break; }
+      case "reshoot": {
+        // Rerun a whole shootout: Kling's take keeps the prompt's @tags and the cast
+        const all = state.generations.filter(x => x.group === g.group), base = all.find(x => x.model === KLING) || g;
+        await action("redo", base, el, host);
+        const ms = SHOOT.filter(m => all.some(x => x.model === m));
+        settings.shoot = true; settings.shootModels = ms.length >= 2 ? ms : [...SHOOT];
+        settings.tier = all.some(x => x.params && SHOOT_RES.keeper[x.model] === x.params.resolution) ? "keeper" : "try";
+        syncVModel(); applyVMode(); renderCastPick(); renderPills(); estimate();
+        toast("Shootout loaded. Change the motion, approve, generate.");
         break; }
       case "redo":
         closeViewer(); setKind("video"); settings.shoot = false;
